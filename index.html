@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>謄本轉清冊｜本機版</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">簿</span><span>謄本轉清冊 <small>本機版</small></span></div>
+    <div class="privacy"><span class="dot"></span>資料僅於此電腦瀏覽器處理</div>
+    <div class="actions"><button id="saveBtn" class="ghost">儲存草稿</button><button id="printBtn" class="primary">匯出 PDF</button></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div><p class="eyebrow">LAND REGISTRY WORKFLOW</p><h1>把謄本，快速整理成<br><em>可直接列印</em>的清冊。</h1><p class="intro">上傳掃描圖片或 PDF 後在本機執行 OCR；辨識結果可逐筆校正，再匯出 Excel 相容檔案。</p></div>
+      <div class="hero-note"><strong>離線優先</strong><span>不會上傳謄本、身分證字號或權利人資料。</span></div>
+    </section>
+
+    <section class="workflow" aria-label="處理步驟"><div class="step active"><b>01</b><span>載入謄本</span></div><div class="line"></div><div class="step"><b>02</b><span>OCR 辨識</span></div><div class="line"></div><div class="step"><b>03</b><span>校對清冊</span></div><div class="line"></div><div class="step"><b>04</b><span>列印／匯出</span></div></section>
+
+    <div class="layout">
+      <aside class="sidebar">
+        <section class="panel source-panel"><div class="section-title"><span>來源謄本</span><small>選填</small></div>
+          <label class="dropzone" for="sourceFile"><input id="sourceFile" type="file" accept="application/pdf,image/*" multiple hidden><span class="upload-icon">↥</span><strong>加入謄本 PDF 或掃描圖片</strong><small>PDF、JPG、PNG、TIFF</small></label>
+          <label class="mode-label">讀取模式
+            <select id="readMode"><option value="auto">智慧混合（建議）</option><option value="direct">僅讀取 PDF 文字</option><option value="ocr">全部以 OCR 掃描</option></select>
+          </label>
+          <div id="fileList" class="file-list"></div>
+          <button id="ocrBtn" class="wide secondary" disabled>讀取並自動帶入</button>
+          <div id="progressWrap" class="progress-wrap" hidden><div><span id="progressLabel">準備讀取文件</span><b id="progressPercent">0%</b></div><div class="progress-track"><span id="progressFill"></span></div></div>
+          <p class="hint">智慧混合會優先讀取 PDF 原有文字；只有掃描頁或文字不足頁才 OCR，可節省時間。</p>
+        </section>
+        <section class="panel"><div class="section-title"><span>OCR 設定</span><button class="text-btn" id="toggleOcr">展開</button></div>
+          <div id="ocrSettings" hidden><p class="hint"><b>模型已就緒：</b>繁體中文與英文辨識模型已安裝於本機。PDF、影像與辨識結果均不會上傳網路。</p></div>
+        </section>
+      </aside>
+
+      <section class="workspace">
+        <section class="panel metadata"><div class="section-heading"><div><p class="eyebrow">清冊基本資料</p><h2>土地資料</h2></div><button id="loadDemoBtn" class="text-btn">載入範例格式</button></div>
+          <div class="form-grid"><label>縣市／行政區<input id="district" placeholder="例：桃園市龍潭區"></label><label>段別<input id="section" placeholder="例：北坑段"></label><label>地號<input id="parcel" placeholder="例：0798-0000"></label><label>總面積（m²）<input id="area" type="number" min="0" step="0.01"></label><label>公告現值（元/m²）<input id="value" type="number" min="0" step="1"></label><label>使用分區／類別<input id="zoning" placeholder="例：山坡地保育區　農牧用地"></label><label class="full">建號／補充資訊<input id="building" placeholder="例：建號、謄本日期或其他說明"></label></div>
+        </section>
+
+        <section class="panel register"><div class="section-heading"><div><p class="eyebrow">OWNER REGISTER</p><h2>權利人清冊</h2></div><div class="table-actions"><button id="addRowBtn" class="secondary">＋ 新增一筆</button><button id="exportBtn" class="ghost">匯出 Excel</button></div></div>
+          <div class="table-wrap"><table><thead><tr><th>次序</th><th>姓名</th><th>性別</th><th>地址</th><th colspan="3">持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th><th></th></tr><tr class="subhead"><th></th><th></th><th></th><th></th><th>分子</th><th class="slash">／</th><th>分母</th><th></th><th></th><th></th><th></th><th></th></tr></thead><tbody id="rows"></tbody><tfoot><tr><td colspan="7">合計</td><td id="totalArea">0.00</td><td colspan="4"><span id="totalRatio">總面積 0.00 m²　約 0.00 坪</span></td></tr></tfoot></table></div>
+          <p class="hint"><b>身分證字號提示：</b>第二碼為 <b>1</b> 顯示「男」，第二碼為 <b>2</b> 顯示「女」；不符合格式者不自動判定。</p>
+        </section>
+      </section>
+    </div>
+  </main>
+  <div id="toast" role="status"></div>
+  <template id="rowTemplate"><tr><td class="serial"></td><td><input data-key="name" placeholder="姓名"></td><td><span class="gender">—</span><input data-key="id" class="id-input" placeholder="身分證字號" title="僅供判定性別，不會寫入匯出檔"></td><td><input data-key="address" placeholder="地址"></td><td><input data-key="numerator" type="number" min="0" step="1" value="1"></td><td class="slash">／</td><td><input data-key="denominator" type="number" min="1" step="1" value="1"></td><td class="share-area">0.00</td><td><input data-key="date" placeholder="112.09.26"></td><td><input data-key="reason" placeholder="買賣／繼承"></td><td><input data-key="note" placeholder="備註"></td><td><button class="delete-row" title="刪除這筆">×</button></td></tr></template>
+  <script src="vendor/tesseract.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

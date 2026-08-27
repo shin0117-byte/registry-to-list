@@ -1,0 +1,15 @@
+{
+  "name": "registry-to-list-local",
+  "private": true,
+  "version": "1.0.0",
+  "description": "離線優先的土地謄本轉清冊工具",
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.80",
+    "pdfjs-dist": "^5.4.624",
+    "tesseract.js": "^6.0.1",
+    "tesseract.js-core": "^6.1.2"
+  },
+  "scripts": {
+    "start": "node server.mjs"
+  }
+}
