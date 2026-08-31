@@ -67,7 +67,22 @@ $('#addRowBtn').addEventListener('click',()=>addRow()); $('#area').addEventListe
 $('#loadDemoBtn').addEventListener('click',()=>{rows.innerHTML=''; demo.forEach(addRow); toast('已載入範例格式資料');});
 $('#toggleOcr').addEventListener('click',()=>{const p=$('#ocrSettings');p.hidden=!p.hidden;$('#toggleOcr').textContent=p.hidden?'展開':'收合';});
 $('#sourceFile').addEventListener('change',(e)=>{state.files=[...e.target.files];$('#fileList').innerHTML=state.files.map(f=>`<div class="file-item">${escapeXml(f.name)}</div>`).join('');$('#ocrBtn').disabled=!state.files.length;});
-async function runOcr() {
+async function refreshPaddleSetup() {
+  const panel = $('#paddleSetup'); const title = $('#paddleSetupTitle'); const text = $('#paddleSetupText'); const install = $('#paddleInstallBtn'); const download = $('#pythonDownload');
+  try {
+    const result = await fetch('/api/paddleocr-status'); const status = await result.json();
+    const health = await fetch('http://127.0.0.1:8766/health', { signal: AbortSignal.timeout(900) }).then(r => r.ok).catch(() => false);
+    localDownload.hidden = true; panel.hidden = health;
+    if (health) return;
+    if (!status.pythonAvailable) { title.textContent = '啟用精準 OCR：先安裝 Python'; text.textContent = '請按「下載 Python」，安裝時勾選 Add python.exe to PATH。完成後重新開啟本網站，再按「重新檢查」。'; install.hidden = true; download.hidden = false; return; }
+    title.textContent = status.installed ? 'PaddleOCR 已安裝，正在啟動' : '可啟用 PaddleOCR 精準模式';
+    text.textContent = status.installed ? '請重新開啟本網站；啟動器會自動啟動本機 OCR 服務。' : '按下「立即安裝 PaddleOCR」會開啟本機安裝視窗，首次下載模型可能需要幾分鐘。安裝完成後重新開啟本網站。';
+    install.hidden = status.installed; download.hidden = true;
+  } catch { panel.hidden = false; title.textContent = '無法檢查精準 OCR 狀態'; text.textContent = '請確認本網站是透過本機啟動器開啟，然後重新整理。'; }
+}
+$('#paddleCheckBtn').addEventListener('click', refreshPaddleSetup);
+$('#paddleInstallBtn').addEventListener('click', async () => { const button = $('#paddleInstallBtn'); button.disabled = true; try { const response = await fetch('/api/start-paddleocr-install', { method: 'POST' }); if (response.status === 409) { await refreshPaddleSetup(); return; } if (!response.ok) throw new Error(); toast('安裝視窗已開啟；完成後重新開啟本網站。'); } catch { toast('無法啟動安裝器，請重新開啟本網站後再試。'); } finally { button.disabled = false; } });
+refreshPaddleSetup();async function runOcr() {
   if (!state.files.length) return;
   const button = $('#ocrBtn'); const mode = $('#readMode').value;
   button.disabled = true; button.textContent = '讀取文件中…'; setProgress(0, '正在讀取 PDF 與分析頁面');
@@ -76,27 +91,38 @@ async function runOcr() {
     const source = await collectSourceContent(state.files, mode, (current, total) => { setProgress((current / total) * 20, `正在分析第 ${current}/${total} 頁`); });
     let ocrText = ''; const addressTexts = [];
     if (source.images.length) {
-      if (!window.Tesseract) throw new Error('找不到 OCR 模組；請先執行 npm install。');
-      const localUrl = (path) => new URL(path, window.location.href).href;
-      let currentJob = 0; const totalJobs = source.images.length;
-      const worker = await Tesseract.createWorker('chi_tra', 1, {
-        langPath: localUrl('ocr-assets'), workerPath: localUrl('vendor/worker.min.js'), corePath: localUrl('vendor/tesseract-core.wasm.js'),
-        logger: (m) => { if (m.status === 'recognizing text') setProgress(20 + ((currentJob + m.progress) / totalJobs) * 75, `OCR 辨識第 ${currentJob + 1}/${totalJobs} 項`); }
-      });
-      for (let index = 0; index < source.images.length; index += 1) {
-        currentJob = index; const job = source.images[index]; setProgress(20 + (index / totalJobs) * 75, `OCR 辨識第 ${index + 1}/${totalJobs} 項`);
-        await worker.setParameters({ tessedit_pageseg_mode: job.kind === 'address' ? '6' : '3' });
-        const result = await worker.recognize(job.blob);
-        if (job.kind === 'address') addressTexts.push(result.data.text); else ocrText += `\n${result.data.text}`;
-      }
-      await worker.terminate();
-    }
-    const ownerText = `${source.directText}\n${ocrText}`;
+      const paddle = await runPaddleOcr(source.images, setProgress);
+      if (paddle) { ocrText = paddle.ocrText; addressTexts.push(...paddle.addressTexts); }
+      else { const fallback = await runTesseractOcr(source.images, setProgress); ocrText = fallback.ocrText; addressTexts.push(...fallback.addressTexts); }
+    }    const ownerText = `${source.directText}\n${ocrText}`;
     setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(source.directText, ownerText, addressTexts); setProgress(100, '完成');
   } catch (error) { console.error(error); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
-async function collectSourceContent(files, mode, progress) {
+async function runPaddleOcr(images, progress) {
+  try {
+    const probe = await fetch('http://127.0.0.1:8766/health', { signal: AbortSignal.timeout(1200) });
+    if (!probe.ok) return null;
+    let ocrText = ''; const addressTexts = [];
+    for (let index = 0; index < images.length; index += 1) {
+      const job = images[index]; progress(20 + (index / images.length) * 75, `PaddleOCR 精準辨識第 ${index + 1}/${images.length} 項`);
+      const image = await blobToBase64(job.blob);
+      const response = await fetch('http://127.0.0.1:8766/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) });
+      const body = await response.json(); if (!response.ok) throw new Error(body.error || 'PaddleOCR 服務錯誤');
+      if (job.kind === 'address') addressTexts.push(body.text); else ocrText += `\n${body.text}`;
+    }
+    return { ocrText, addressTexts };
+  } catch (error) { console.info('PaddleOCR unavailable; using built-in OCR.', error); return null; }
+}
+function blobToBase64(blob) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = reject; reader.onload = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(blob); }); }
+async function runTesseractOcr(images, progress) {
+  if (!window.Tesseract) throw new Error('找不到 OCR 模組；請先執行 npm install。');
+  const localUrl = (path) => new URL(path, window.location.href).href; let ocrText = ''; const addressTexts = [];
+  let currentJob = 0; const totalJobs = images.length;
+  const worker = await Tesseract.createWorker('chi_tra', 1, { langPath: localUrl('ocr-assets'), workerPath: localUrl('vendor/worker.min.js'), corePath: localUrl('vendor/tesseract-core.wasm.js'), logger: (m) => { if (m.status === 'recognizing text') progress(20 + ((currentJob + m.progress) / totalJobs) * 75, `內建 OCR 辨識第 ${currentJob + 1}/${totalJobs} 項`); } });
+  for (let index = 0; index < images.length; index += 1) { currentJob = index; const job = images[index]; progress(20 + (index / totalJobs) * 75, `內建 OCR 辨識第 ${index + 1}/${totalJobs} 項`); await worker.setParameters({ tessedit_pageseg_mode: job.kind === 'address' ? '6' : '3' }); const result = await worker.recognize(job.blob); if (job.kind === 'address') addressTexts.push(result.data.text); else ocrText += `\n${result.data.text}`; }
+  await worker.terminate(); return { ocrText, addressTexts };
+}async function collectSourceContent(files, mode, progress) {
   const images = []; let directText = ''; let insideOwnershipSection = false;
   const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
   const imageFiles = files.filter(file => !pdfFiles.includes(file));
@@ -305,3 +331,6 @@ function extractLabelledOwners(text) {
 }
 $('#ocrBtn').addEventListener('click', runOcr);
 restoreDraft();
+
+
+

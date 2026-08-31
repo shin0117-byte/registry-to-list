@@ -12,6 +12,12 @@
 
 ## 導入真正離線 OCR
 
+### PaddleOCR 精準模式（建議）
+
+首次使用時，雙擊 `安裝PaddleOCR精準模式.cmd`。它會建立專案專用的 Python 虛擬環境、安裝 CPU 版 PaddleOCR，並預先下載繁體中文精準模型；安裝期間需要網路。完成後，照常雙擊 `啟動謄本轉清冊系統.cmd`，它會同時啟動只綁定 `127.0.0.1:8766` 的 PaddleOCR 服務與網頁介面。網頁會優先使用 PaddleOCR；服務未安裝或暫時無法啟動時，才自動回退至內建 Tesseract。
+
+PaddleOCR 模型首度預載後，後續辨識皆在本機完成。若沒有 Python，安裝工具會顯示官方安裝連結；建議使用 Python 3.10 或 3.11，並在安裝時勾選加入 PATH。
+
 OCR 已使用 Tesseract.js 本機 worker。謄本 PDF 會先在瀏覽器逐頁轉成影像，之後才由 OCR 辨識；過程不會將 PDF 上傳或傳送至網路。要在沒有網路下辨識繁體中文，請將下列檔案放入 `ocr-assets/`：
 
 - `chi_tra.traineddata.gz`（繁體中文語言資料）
@@ -28,3 +34,4 @@ OCR 已使用 Tesseract.js 本機 worker。謄本 PDF 會先在瀏覽器逐頁�
 `roads.json` 內建使用者提供的 114 年全臺 35,516 筆路名。程式會先以縣市與鄉鎮市區縮小範圍，再確認 OCR 讀到的路名；若僅有一個字的高把握誤讀，才會校正，避免跨區同名路或過度猜測。
 
 如行政區改制，可在有網路的開發環境執行 `node scripts/build-localities.mjs` 重建資料；該工具使用使用者提供的 Wikipedia 現行鄉鎮市區清單。
+

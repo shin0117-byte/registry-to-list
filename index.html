@@ -21,7 +21,10 @@
 
     <section class="workflow" aria-label="處理步驟"><div class="step active"><b>01</b><span>載入謄本</span></div><div class="line"></div><div class="step"><b>02</b><span>OCR 辨識</span></div><div class="line"></div><div class="step"><b>03</b><span>校對清冊</span></div><div class="line"></div><div class="step"><b>04</b><span>列印／匯出</span></div></section>
 
-    <div class="layout">
+    <section id="paddleSetup" class="paddle-setup" hidden aria-live="polite">
+      <div><p class="eyebrow">PRECISION OCR</p><h2 id="paddleSetupTitle">正在檢查精準 OCR…</h2><p id="paddleSetupText">請稍候。</p></div>
+      <div class="paddle-actions"><a id="localDownload" class="ghost" href="./downloads/registry-to-list-local.zip" download hidden>下載本機版</a><a id="pythonDownload" class="ghost" href="https://www.python.org/downloads/windows/" target="_blank" rel="noopener">下載 Python</a><button id="paddleInstallBtn" class="primary">立即安裝 PaddleOCR</button><button id="paddleCheckBtn" class="text-btn">重新檢查</button></div>
+    </section>    <div class="layout">
       <aside class="sidebar">
         <section class="panel source-panel"><div class="section-title"><span>來源謄本</span><small>選填</small></div>
           <label class="dropzone" for="sourceFile"><input id="sourceFile" type="file" accept="application/pdf,image/*" multiple hidden><span class="upload-icon">↥</span><strong>加入謄本 PDF 或掃描圖片</strong><small>PDF、JPG、PNG、TIFF</small></label>
@@ -34,7 +37,7 @@
           <p class="hint">智慧混合會優先讀取 PDF 原有文字；只有掃描頁或文字不足頁才 OCR，可節省時間。</p>
         </section>
         <section class="panel"><div class="section-title"><span>OCR 設定</span><button class="text-btn" id="toggleOcr">展開</button></div>
-          <div id="ocrSettings" hidden><p class="hint"><b>模型已就緒：</b>繁體中文與英文辨識模型已安裝於本機。PDF、影像與辨識結果均不會上傳網路。</p></div>
+          <div id="ocrSettings" hidden><p class="hint"><b>精準模式：</b>先執行「安裝PaddleOCR精準模式.cmd」，之後由啟動工具自動啟用繁體中文 PaddleOCR；未安裝時會使用內建離線 OCR。PDF、影像與結果均不會離開本機。</p></div>
         </section>
       </aside>
 
@@ -56,3 +59,6 @@
   <script src="app.js"></script>
 </body>
 </html>
+
+
+
