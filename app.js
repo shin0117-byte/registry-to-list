@@ -68,7 +68,9 @@ $('#loadDemoBtn').addEventListener('click',()=>{rows.innerHTML=''; demo.forEach(
 $('#toggleOcr').addEventListener('click',()=>{const p=$('#ocrSettings');p.hidden=!p.hidden;$('#toggleOcr').textContent=p.hidden?'展開':'收合';});
 $('#sourceFile').addEventListener('change',(e)=>{state.files=[...e.target.files];$('#fileList').innerHTML=state.files.map(f=>`<div class="file-item">${escapeXml(f.name)}</div>`).join('');$('#ocrBtn').disabled=!state.files.length;});
 async function refreshPaddleSetup() {
-  const panel = $('#paddleSetup'); const title = $('#paddleSetupTitle'); const text = $('#paddleSetupText'); const install = $('#paddleInstallBtn'); const download = $('#pythonDownload');
+  const panel = $('#paddleSetup'); const title = $('#paddleSetupTitle'); const text = $('#paddleSetupText'); const install = $('#paddleInstallBtn'); const download = $('#pythonDownload'); const localDownload = $('#localDownload');
+  if (location.protocol === 'file:') { panel.hidden = true; return; }
+  if (!['127.0.0.1', 'localhost'].includes(location.hostname)) { panel.hidden = false; title.textContent = '使用精準 OCR，請先下載本機版'; text.textContent = '公開網站無法存取你的文件或啟動電腦上的 OCR。下載 Windows 桌面版後直接執行；OCR 與文件都在你的電腦上處理，不需要 Python。'; install.hidden = true; download.hidden = true; localDownload.hidden = false; return; }
   try {
     const result = await fetch('/api/paddleocr-status'); const status = await result.json();
     const health = await fetch('http://127.0.0.1:8766/health', { signal: AbortSignal.timeout(900) }).then(r => r.ok).catch(() => false);
@@ -82,12 +84,13 @@ async function refreshPaddleSetup() {
 }
 $('#paddleCheckBtn').addEventListener('click', refreshPaddleSetup);
 $('#paddleInstallBtn').addEventListener('click', async () => { const button = $('#paddleInstallBtn'); button.disabled = true; try { const response = await fetch('/api/start-paddleocr-install', { method: 'POST' }); if (response.status === 409) { await refreshPaddleSetup(); return; } if (!response.ok) throw new Error(); toast('安裝視窗已開啟；完成後重新開啟本網站。'); } catch { toast('無法啟動安裝器，請重新開啟本網站後再試。'); } finally { button.disabled = false; } });
-refreshPaddleSetup();async function runOcr() {
+refreshPaddleSetup();
+async function runOcr() {
   if (!state.files.length) return;
   const button = $('#ocrBtn'); const mode = $('#readMode').value;
   button.disabled = true; button.textContent = '讀取文件中…'; setProgress(0, '正在讀取 PDF 與分析頁面');
   try {
-    if (window.location.protocol === 'file:') throw new Error('目前以檔案方式開啟，請改用「啟動謄本轉清冊系統.cmd」開啟 http://127.0.0.1:4173/。');
+
     const source = await collectSourceContent(state.files, mode, (current, total) => { setProgress((current / total) * 20, `正在分析第 ${current}/${total} 頁`); });
     let ocrText = ''; const addressTexts = [];
     if (source.images.length) {
@@ -331,6 +334,9 @@ function extractLabelledOwners(text) {
 }
 $('#ocrBtn').addEventListener('click', runOcr);
 restoreDraft();
+
+
+
 
 
 

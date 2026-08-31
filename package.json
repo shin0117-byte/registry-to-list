@@ -10,6 +10,36 @@
     "tesseract.js-core": "^6.1.2"
   },
   "scripts": {
-    "start": "node server.mjs"
-  }
+    "start": "node server.mjs",
+    "desktop:dev": "electron .",
+    "desktop:build": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "tw.gov.registrytolist",
+    "productName": "謄本轉清冊",
+    "asar": true,
+    "files": [
+      "index.html",
+      "styles.css",
+      "app.js",
+      "vendor/**",
+      "ocr-assets/**",
+      "land-sections.json",
+      "localities.json",
+      "roads.json",
+      "electron-main.cjs",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "portable"
+      ]
+    },
+    "artifactName": "${productName}-桌面版-${version}.${ext}"
+  },
+  "main": "electron-main.cjs"
 }
