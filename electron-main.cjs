@@ -6,7 +6,11 @@ let ocrProcess;
 function startOcr() {
   const bundled = path.join(process.resourcesPath, 'paddle-models');
   const modelRoot = 'C:\\PaddleOCRRuntime\\models';
-  if (!existsSync(modelRoot)) { mkdirSync(path.dirname(modelRoot), { recursive: true }); cpSync(bundled, modelRoot, { recursive: true }); }
+  const requiredModel = path.join(modelRoot, 'rec', 'chinese_cht', 'chinese_cht_PP-OCRv3_rec_infer', 'inference.pdmodel');
+  if (!existsSync(requiredModel)) {
+    mkdirSync(path.dirname(modelRoot), { recursive: true });
+    cpSync(bundled, modelRoot, { recursive: true, force: true });
+  }
   const python = path.join(process.resourcesPath, 'ocr-runtime', 'Scripts', 'python.exe');
   const service = path.join(process.resourcesPath, 'paddle_service_runtime.py');
   ocrProcess = spawn(python, [service], { windowsHide: true, env: { ...process.env, OCR_MODELS_DIR: modelRoot } });
