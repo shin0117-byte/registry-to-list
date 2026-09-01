@@ -24,7 +24,7 @@
     </section>
 <section id="paddleSetup" class="paddle-setup" hidden aria-live="polite">
       <div><p class="eyebrow">PRECISION OCR</p><h2 id="paddleSetupTitle">PaddleOCR 精準模式</h2><p id="paddleSetupText">正在啟動本機辨識服務。</p></div>
-      <div class="paddle-actions"><a id="localDownload" class="ghost" href="https://github.com/shin0117-byte/registry-to-list/releases/download/v1.1.3/registry-to-list-paddle-portable-1.1.3.zip">下載免安裝桌面版</a></div>
+      <div class="paddle-actions"><a id="localDownload" class="ghost" href="https://github.com/shin0117-byte/registry-to-list/releases/download/v1.1.4/registry-to-list-paddle-portable-1.1.4.zip">下載免安裝桌面版</a></div>
     </section>    <div class="layout">
       <aside class="sidebar">
         <section class="panel source-panel"><div class="section-title"><span>來源謄本</span><small>選填</small></div>
@@ -45,14 +45,14 @@
         </section>
 
         <section class="panel register"><div class="section-heading"><div><p class="eyebrow">OWNER REGISTER</p><h2>權利人清冊</h2></div><div class="table-actions"><button id="addRowBtn" class="secondary">＋ 新增一筆</button><button id="exportBtn" class="ghost">匯出 Excel</button></div></div>
-          <div class="table-wrap"><table><thead><tr><th>次序</th><th>姓名</th><th>性別</th><th>地址</th><th colspan="3">持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th><th></th></tr><tr class="subhead"><th></th><th></th><th></th><th></th><th>分子</th><th class="slash">／</th><th>分母</th><th></th><th></th><th></th><th></th><th></th></tr></thead><tbody id="rows"></tbody><tfoot><tr><td colspan="7">合計</td><td id="totalArea">0.00</td><td colspan="4"><span id="totalRatio">總面積 0.00 m²　約 0.00 坪</span></td></tr></tfoot></table></div>
+          <div class="table-wrap"><table class="owner-table"><colgroup><col class="col-serial"><col class="col-name"><col class="col-gender"><col class="col-address"><col class="col-numerator"><col class="col-slash"><col class="col-denominator"><col class="col-share"><col class="col-date"><col class="col-reason"><col class="col-note"><col class="col-action"></colgroup><thead><tr><th>次序</th><th>姓名</th><th>性別</th><th>地址</th><th colspan="3">持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th><th></th></tr><tr class="subhead"><th></th><th></th><th></th><th></th><th>分子</th><th class="slash">／</th><th>分母</th><th></th><th></th><th></th><th></th><th></th></tr></thead><tbody id="rows"></tbody><tfoot><tr><td colspan="7">合計</td><td id="totalArea">0.00</td><td colspan="4"><span id="totalRatio">總面積 0.00 m²　約 0.00 坪</span></td></tr></tfoot></table></div>
           <p class="hint"><b>身分證字號提示：</b>第二碼為 <b>1</b> 顯示「男」、第二碼為 <b>2</b> 顯示「女」；遮碼姓名會依此自動補成「先生／小姐」。</p>
         </section>
       </section>
     </div>
   </main>
   <div id="toast" role="status"></div>
-  <template id="rowTemplate"><tr><td class="serial"></td><td><input data-key="name" placeholder="姓名"></td><td><span class="gender">—</span><input data-key="id" class="id-input" placeholder="身分證字號" title="僅供判定性別，不會寫入匯出檔"></td><td><input data-key="address" placeholder="地址"></td><td><input data-key="numerator" type="number" min="0" step="1" value="1"></td><td class="slash">／</td><td><input data-key="denominator" type="number" min="1" step="1" value="1"></td><td class="share-area">0.00</td><td><input data-key="date" placeholder="112.09.26"></td><td><input data-key="reason" placeholder="買賣／繼承"></td><td><input data-key="note" placeholder="備註"></td><td><button class="delete-row" title="刪除這筆">×</button></td></tr></template>
+  <template id="rowTemplate"><tr><td class="serial"></td><td><input data-key="name" placeholder="姓名"></td><td><span class="gender">—</span><input data-key="id" class="id-input" placeholder="身分證字號" title="僅供判定性別，不會寫入匯出檔"></td><td><textarea data-key="address" rows="2" placeholder="地址"></textarea></td><td><textarea data-key="numerator" rows="1" inputmode="numeric" placeholder="1">1</textarea></td><td class="slash">／</td><td><textarea data-key="denominator" rows="1" inputmode="numeric" placeholder="1">1</textarea></td><td class="share-area">0.00</td><td><input data-key="date" placeholder="112.09.26"></td><td><input data-key="reason" placeholder="買賣／繼承"></td><td><input data-key="note" placeholder="備註"></td><td><button class="delete-row" title="刪除這筆">×</button></td></tr></template>
   <script src="vendor/tesseract.min.js"></script>
   <script src="app.js"></script>
 </body>

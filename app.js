@@ -16,6 +16,7 @@ function addRow(data = []) {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
   tr.addEventListener('input', updateRow);
+  tr.querySelectorAll('textarea').forEach(autoGrowField);
   tr.querySelector('.delete-row').addEventListener('click', () => { tr.remove(); updateAll(); });
   rows.append(tr); updateAll();
 }
@@ -31,6 +32,7 @@ function formatOwnerName(name = '', id = '') {
   return /[＊*]+/.test(value) ? value.replace(/[＊*]+/g, title) : `${value}${title}`;
 }
 function updateRow(event) {
+  autoGrowField(event.target);
   const tr = event.currentTarget; const id = tr.querySelector('[data-key="id"]').value;
   tr.querySelector('.gender').textContent = genderFromId(id);
   const name = tr.querySelector('[data-key="name"]'); name.value = formatOwnerName(name.value, id);
@@ -171,8 +173,8 @@ async function runTesseractOcr(images, progress) {
 }
 async function cropAddressLine(canvas, viewport, idItem) {
   const scale = viewport.scale; const idY = idItem.transform[5];
-  const top = Math.max(0, Math.round(viewport.height - (idY + 6) * scale));
-  const crop = document.createElement('canvas'); crop.width = Math.min(canvas.width, Math.round(550 * scale)); crop.height = Math.round(62 * scale);
+  const top = Math.max(0, Math.round(viewport.height - (idY - 4) * scale));
+  const crop = document.createElement('canvas'); crop.width = Math.min(canvas.width, Math.round(430 * scale)); crop.height = Math.round(26 * scale);
   crop.getContext('2d').drawImage(canvas, 0, top, crop.width, crop.height, 0, 0, crop.width, crop.height);
   const pixels = crop.getContext('2d').getImageData(0, 0, crop.width, crop.height);
   for (let index = 0; index < pixels.data.length; index += 4) {
@@ -197,7 +199,7 @@ function rebuildPdfLines(items) {
   return lines.sort((a, b) => b.y - a.y).map(line => line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ')).join('\n');
 }
 async function applyExtractedData(landText, ownerText, addressTexts = []) {
-  [...rows.children].filter(tr => /自動辨識|謄本未載地址|地址 OCR/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
+  [...rows.children].filter(tr => /自動辨識|謄本未載住址|地址辨識|地址 OCR/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
   const cleanLand = landText.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
   const fields = extractLandFields(cleanLand); let filled = 0;
   const mappedDistrict = await lookupDistrict(fields.section);
@@ -208,11 +210,17 @@ async function applyExtractedData(landText, ownerText, addressTexts = []) {
   let owners = extractOwners(ownershipSection, cleanOwners);
   const localityDatabase = await loadLocalities();
   const roadDatabase = await loadRoads();
-  owners.forEach((owner, index) => { owner.address = extractAddress(addressTexts[index] || '', fields.district || $('#district').value, localityDatabase, roadDatabase); });
+  const documentHasAddress = addressTexts.length > 0 || /住\s*[址阯]/.test(ownershipSection);
+  owners.forEach((owner, index) => {
+    const structuredAddress = extractAddress(owner.address || '', fields.district || $('#district').value, localityDatabase, roadDatabase);
+    const croppedOcrAddress = extractAddress(addressTexts[index] || '', fields.district || $('#district').value, localityDatabase, roadDatabase);
+    owner.address = selectBestAddress(structuredAddress, croppedOcrAddress);
+    owner.addressAvailable = documentHasAddress;
+  });
   owners = groupCommonOwnership(owners);
   const existing = new Set([...rows.children].map(tr => [tr.dataset.sequence, tr.querySelector('[data-key="name"]').value, tr.querySelector('[data-key="id"]').value].join('|')));
   const newOwners = owners.filter(owner => { const key = [owner.sequence || '', owner.name, owner.id].join('|'); if (!owner.name || existing.has(key)) return false; existing.add(key); return true; });
-  newOwners.forEach(owner => { const note = owner.common ? `公同共有（${owner.members.length}人；持分坪數合併計算）` : (owner.address ? '地址 OCR，請校對' : '地址 OCR 未辨識'); addRow([owner.name, owner.id, owner.address, owner.numerator, owner.denominator, owner.date, owner.reason, note]); rows.lastElementChild.dataset.sequence = owner.sequence || ''; });
+  newOwners.forEach(owner => { const note = owner.common ? `公同共有（${owner.members.length}人；持分坪數合併計算）` : (owner.address ? '地址辨識，請校對' : (owner.addressAvailable ? '地址 OCR 未辨識' : '謄本未載住址')); addRow([owner.name, owner.id, owner.address, owner.numerator, owner.denominator, owner.date, owner.reason, note]); rows.lastElementChild.dataset.sequence = owner.sequence || ''; });
   updateAll();
   toast(`讀取完成：土地資料帶入 ${filled} 項，新增權利人 ${newOwners.length} 筆。`);
 }
