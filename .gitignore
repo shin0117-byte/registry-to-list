@@ -5,3 +5,9 @@ node_modules/
 *.local
 .paddleocr-venv/
 dist/
+.paddle-build-venv/
+.paddle-models/
+.paddle-models-home/
+paddle-ocr/models/
+build/
+*.spec

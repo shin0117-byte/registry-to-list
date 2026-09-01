@@ -1,7 +1,7 @@
 {
   "name": "registry-to-list-local",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "離線優先的土地謄本轉清冊工具",
   "dependencies": {
     "@napi-rs/canvas": "^0.1.80",
@@ -39,7 +39,21 @@
         "portable"
       ]
     },
-    "artifactName": "${productName}-桌面版-${version}.${ext}"
+    "artifactName": "${productName}-桌面版-${version}.${ext}",
+    "extraResources": [
+      {
+        "to": "ocr-runtime",
+        "from": ".paddle-build-venv"
+      },
+      {
+        "to": "paddle-models",
+        "from": "paddle-ocr/models"
+      },
+      {
+        "to": "paddle_service_runtime.py",
+        "from": "paddle-ocr/paddle_service_runtime.py"
+      }
+    ]
   },
   "main": "electron-main.cjs"
 }

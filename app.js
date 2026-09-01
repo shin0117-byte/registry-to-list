@@ -94,7 +94,7 @@ async function runOcr() {
     const source = await collectSourceContent(state.files, mode, (current, total) => { setProgress((current / total) * 20, `正在分析第 ${current}/${total} 頁`); });
     let ocrText = ''; const addressTexts = [];
     if (source.images.length) {
-      const paddle = location.protocol === 'file:' ? null : await runPaddleOcr(source.images, setProgress);
+      const paddle = await runPaddleOcr(source.images, setProgress);
       if (paddle) { ocrText = paddle.ocrText; addressTexts.push(...paddle.addressTexts); }
       else { const fallback = await runTesseractOcr(source.images, setProgress); ocrText = fallback.ocrText; addressTexts.push(...fallback.addressTexts); }
     }    const ownerText = `${source.directText}\n${ocrText}`;
@@ -334,6 +334,7 @@ function extractLabelledOwners(text) {
 }
 $('#ocrBtn').addEventListener('click', runOcr);
 restoreDraft();
+
 
 
 
