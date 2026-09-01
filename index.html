@@ -18,12 +18,13 @@
       <div><p class="eyebrow">LAND REGISTRY WORKFLOW</p><h1>把謄本，快速整理成<br><em>可直接列印</em>的清冊。</h1><p class="intro">上傳掃描圖片或 PDF 後在本機執行 OCR；辨識結果可逐筆校正，再匯出 Excel 相容檔案。</p></div>
       <div class="hero-note"><strong>離線優先</strong><span>不會上傳謄本、身分證字號或權利人資料。</span></div>
     </section>
-
-    <section class="workflow" aria-label="處理步驟"><div class="step active"><b>01</b><span>載入謄本</span></div><div class="line"></div><div class="step"><b>02</b><span>OCR 辨識</span></div><div class="line"></div><div class="step"><b>03</b><span>校對清冊</span></div><div class="line"></div><div class="step"><b>04</b><span>列印／匯出</span></div></section>
-
-    <section id="paddleSetup" class="paddle-setup" hidden aria-live="polite">
-      <div><p class="eyebrow">PRECISION OCR</p><h2 id="paddleSetupTitle">正在檢查精準 OCR…</h2><p id="paddleSetupText">請稍候。</p></div>
-      <div class="paddle-actions"><a id="localDownload" class="ghost" href="https://github.com/shin0117-byte/registry-to-list/releases/download/v1.1.1/registry-to-list-paddle-portable-1.1.1.zip">下載免安裝桌面版</a><a id="pythonDownload" class="ghost" href="https://www.python.org/downloads/windows/" target="_blank" rel="noopener">下載 Python</a><button id="paddleInstallBtn" class="primary">立即安裝 PaddleOCR</button><button id="paddleCheckBtn" class="text-btn">重新檢查</button></div>
+    <section id="updateBanner" class="update-banner" hidden aria-live="polite">
+      <div><p class="eyebrow">DESKTOP UPDATE</p><strong id="updateTitle">正在檢查桌面版更新</strong><p id="updateText">請稍候。</p></div>
+      <button id="installUpdateBtn" class="secondary">下載並更新</button>
+    </section>
+<section id="paddleSetup" class="paddle-setup" hidden aria-live="polite">
+      <div><p class="eyebrow">PRECISION OCR</p><h2 id="paddleSetupTitle">PaddleOCR 精準模式</h2><p id="paddleSetupText">正在啟動本機辨識服務。</p></div>
+      <div class="paddle-actions"><a id="localDownload" class="ghost" href="https://github.com/shin0117-byte/registry-to-list/releases/download/v1.1.3/registry-to-list-paddle-portable-1.1.3.zip">下載免安裝桌面版</a></div>
     </section>    <div class="layout">
       <aside class="sidebar">
         <section class="panel source-panel"><div class="section-title"><span>來源謄本</span><small>選填</small></div>
@@ -33,11 +34,8 @@
           </label>
           <div id="fileList" class="file-list"></div>
           <button id="ocrBtn" class="wide secondary" disabled>讀取並自動帶入</button>
-          <div id="progressWrap" class="progress-wrap" hidden><div><span id="progressLabel">準備讀取文件</span><b id="progressPercent">0%</b></div><div class="progress-track"><span id="progressFill"></span></div></div>
+          <p id="ocrEngineStatus" class="hint ocr-engine" aria-live="polite">OCR：待載入文件後開始。</p>
           <p class="hint">智慧混合會優先讀取 PDF 原有文字；只有掃描頁或文字不足頁才 OCR，可節省時間。</p>
-        </section>
-        <section class="panel"><div class="section-title"><span>OCR 設定</span><button class="text-btn" id="toggleOcr">展開</button></div>
-          <div id="ocrSettings" hidden><p class="hint"><b>精準模式：</b>先執行「安裝PaddleOCR精準模式.cmd」，之後由啟動工具自動啟用繁體中文 PaddleOCR；未安裝時會使用內建離線 OCR。PDF、影像與結果均不會離開本機。</p></div>
         </section>
       </aside>
 
@@ -48,7 +46,7 @@
 
         <section class="panel register"><div class="section-heading"><div><p class="eyebrow">OWNER REGISTER</p><h2>權利人清冊</h2></div><div class="table-actions"><button id="addRowBtn" class="secondary">＋ 新增一筆</button><button id="exportBtn" class="ghost">匯出 Excel</button></div></div>
           <div class="table-wrap"><table><thead><tr><th>次序</th><th>姓名</th><th>性別</th><th>地址</th><th colspan="3">持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th><th></th></tr><tr class="subhead"><th></th><th></th><th></th><th></th><th>分子</th><th class="slash">／</th><th>分母</th><th></th><th></th><th></th><th></th><th></th></tr></thead><tbody id="rows"></tbody><tfoot><tr><td colspan="7">合計</td><td id="totalArea">0.00</td><td colspan="4"><span id="totalRatio">總面積 0.00 m²　約 0.00 坪</span></td></tr></tfoot></table></div>
-          <p class="hint"><b>身分證字號提示：</b>第二碼為 <b>1</b> 顯示「男」，第二碼為 <b>2</b> 顯示「女」；不符合格式者不自動判定。</p>
+          <p class="hint"><b>身分證字號提示：</b>第二碼為 <b>1</b> 顯示「男」、第二碼為 <b>2</b> 顯示「女」；遮碼姓名會依此自動補成「先生／小姐」。</p>
         </section>
       </section>
     </div>

@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const rows = $('#rows');
-const state = { files: [] };
+const state = { files: [], ocrEngine: '', paddleAttempts: 0 };
 const demo = [
   ['羅＊＊','','大溪區龍潭鄉三洽水字1243番地',1,9,'---.--.--','總登記','108.7.22未辦繼承列冊'],
   ['卓先生','','桃園市龍潭區三和里店湖一路22號',1,3,'080.01.29','買賣',''],
@@ -12,7 +12,7 @@ function addRow(data = []) {
   const fragment = $('#rowTemplate').content.cloneNode(true);
   const tr = fragment.querySelector('tr');
   const [name, id, address, numerator, denominator, date, reason, note] = data;
-  Object.entries({name, id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
+  Object.entries({name: formatOwnerName(name, id), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
   tr.addEventListener('input', updateRow);
@@ -24,9 +24,16 @@ function genderFromId(id) {
   if (!/^[A-Z][12]/.test(normalized)) return '—';
   return normalized[1] === '1' ? '男' : '女';
 }
+function formatOwnerName(name = '', id = '') {
+  const value = String(name).trim(); const gender = genderFromId(String(id || ''));
+  if (!value || gender === '—' || /(先生|小姐)$/.test(value)) return value;
+  const title = gender === '男' ? '先生' : '小姐';
+  return /[＊*]+/.test(value) ? value.replace(/[＊*]+/g, title) : `${value}${title}`;
+}
 function updateRow(event) {
-  const tr = event.currentTarget;
-  tr.querySelector('.gender').textContent = genderFromId(tr.querySelector('[data-key="id"]').value);
+  const tr = event.currentTarget; const id = tr.querySelector('[data-key="id"]').value;
+  tr.querySelector('.gender').textContent = genderFromId(id);
+  const name = tr.querySelector('[data-key="name"]'); name.value = formatOwnerName(name.value, id);
   updateAll();
 }
 function updateAll() {
@@ -42,7 +49,8 @@ function updateAll() {
   $('#totalRatio').textContent = `總面積 ${area.toLocaleString('zh-TW',{maximumFractionDigits:2})} m²　約 ${(area * .3025).toLocaleString('zh-TW',{maximumFractionDigits:2})} 坪`;
 }
 function toast(text) { const t=$('#toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
-function setProgress(percent, label) { const safe = Math.min(100, Math.max(0, percent)); $('#progressWrap').hidden = false; $('#progressLabel').textContent = label; $('#progressPercent').textContent = `${Math.round(safe)}%`; $('#progressFill').style.width = `${safe}%`; }
+function setProgress(_percent, label) { $('#ocrEngineStatus').textContent = state.ocrEngine ? `OCR：${state.ocrEngine}｜${label}` : `OCR：${label}`; }
+function setOcrEngine(name) { state.ocrEngine = name; $('#ocrEngineStatus').textContent = `OCR：${name}`; }
 function getData() { return [...rows.children].map(tr => Object.fromEntries(['name','id','address','numerator','denominator','date','reason','note'].map(key => [key, tr.querySelector(`[data-key="${key}"]`).value]))); }
 function saveDraft() { localStorage.setItem('registry-draft', JSON.stringify({fields:Object.fromEntries(['district','section','parcel','area','value','zoning','building'].map(k=>[k,$('#'+k).value])), rows:getData()})); toast('草稿已儲存於本機瀏覽器'); }
 function restoreDraft() { try { const d=JSON.parse(localStorage.getItem('registry-draft')); if (!d) return; Object.entries(d.fields).forEach(([k,v])=>$('#'+k).value=v); d.rows.forEach(r=>addRow([r.name,r.id || '',r.address,r.numerator,r.denominator,r.date,r.reason,r.note])); } catch {} }
@@ -63,27 +71,30 @@ function exportPdf() {
   const output = window.open('', '_blank'); if (!output) return toast('瀏覽器阻擋了 PDF 視窗，請允許彈出視窗後再試。');
   output.document.write(documentHtml); output.document.close();
 }
+function setupDesktopUpdater() {
+  if (!window.desktopUpdater) return;
+  const banner = $('#updateBanner'); const title = $('#updateTitle'); const text = $('#updateText'); const button = $('#installUpdateBtn');
+  window.desktopUpdater.onStatus(status => {
+    if (status.state === 'available') { banner.hidden = false; title.textContent = `發現新版 ${status.version}`; text.textContent = '可下載後自動覆蓋更新；程式會重新開啟。'; button.hidden = false; button.disabled = false; return; }
+    if (status.state === 'downloading') { banner.hidden = false; title.textContent = '正在下載更新'; text.textContent = '下載完成後會自動關閉、覆蓋並重新開啟程式。'; button.hidden = true; return; }
+    if (status.state === 'installing') { title.textContent = '正在套用更新'; text.textContent = '程式即將重新開啟。'; }
+  });
+  button.addEventListener('click', async () => { button.disabled = true; try { await window.desktopUpdater.install(); } catch (error) { button.disabled = false; text.textContent = `更新失敗：${error.message || '請稍後再試。'}`; } });
+}
 $('#addRowBtn').addEventListener('click',()=>addRow()); $('#area').addEventListener('input',updateAll); $('#saveBtn').addEventListener('click',saveDraft); $('#printBtn').addEventListener('click',exportPdf); $('#exportBtn').addEventListener('click',exportExcel);
 $('#loadDemoBtn').addEventListener('click',()=>{rows.innerHTML=''; demo.forEach(addRow); toast('已載入範例格式資料');});
-$('#toggleOcr').addEventListener('click',()=>{const p=$('#ocrSettings');p.hidden=!p.hidden;$('#toggleOcr').textContent=p.hidden?'展開':'收合';});
 $('#sourceFile').addEventListener('change',(e)=>{state.files=[...e.target.files];$('#fileList').innerHTML=state.files.map(f=>`<div class="file-item">${escapeXml(f.name)}</div>`).join('');$('#ocrBtn').disabled=!state.files.length;});
 async function refreshPaddleSetup() {
-  const panel = $('#paddleSetup'); const title = $('#paddleSetupTitle'); const text = $('#paddleSetupText'); const install = $('#paddleInstallBtn'); const download = $('#pythonDownload'); const localDownload = $('#localDownload');
-  if (location.protocol === 'file:') { panel.hidden = true; return; }
-  if (!['127.0.0.1', 'localhost'].includes(location.hostname)) { panel.hidden = false; title.textContent = '使用精準 OCR，請先下載本機版'; text.textContent = '公開網站無法存取你的文件或啟動電腦上的 OCR。下載 Windows 桌面版後直接執行；OCR 與文件都在你的電腦上處理，不需要 Python。'; install.hidden = true; download.hidden = true; localDownload.hidden = false; return; }
-  try {
-    const result = await fetch('/api/paddleocr-status'); const status = await result.json();
-    const health = await fetch('http://127.0.0.1:8766/health', { signal: AbortSignal.timeout(900) }).then(r => r.ok).catch(() => false);
-    localDownload.hidden = true; panel.hidden = health;
-    if (health) return;
-    if (!status.pythonAvailable) { title.textContent = '啟用精準 OCR：先安裝 Python'; text.textContent = '請按「下載 Python」，安裝時勾選 Add python.exe to PATH。完成後重新開啟本網站，再按「重新檢查」。'; install.hidden = true; download.hidden = false; return; }
-    title.textContent = status.installed ? 'PaddleOCR 已安裝，正在啟動' : '可啟用 PaddleOCR 精準模式';
-    text.textContent = status.installed ? '請重新開啟本網站；啟動器會自動啟動本機 OCR 服務。' : '按下「立即安裝 PaddleOCR」會開啟本機安裝視窗，首次下載模型可能需要幾分鐘。安裝完成後重新開啟本網站。';
-    install.hidden = status.installed; download.hidden = true;
-  } catch { panel.hidden = false; title.textContent = '無法檢查精準 OCR 狀態'; text.textContent = '請確認本網站是透過本機啟動器開啟，然後重新整理。'; }
+  const panel = $('#paddleSetup'); const title = $('#paddleSetupTitle'); const text = $('#paddleSetupText'); const localDownload = $('#localDownload');
+  const publicSite = !['127.0.0.1', 'localhost'].includes(location.hostname) && location.protocol !== 'file:';
+  if (publicSite) { panel.hidden = false; title.textContent = '使用精準 OCR，請下載本機版'; text.textContent = '公開網站無法啟動你電腦上的 OCR。桌面版已內建 PaddleOCR，不需要安裝 Python。'; localDownload.hidden = false; return; }
+  localDownload.hidden = true; panel.hidden = false;
+  const health = await fetch('http://127.0.0.1:8766/health', { signal: AbortSignal.timeout(1200) }).then(r => r.ok).catch(() => false);
+  if (health) { state.paddleAttempts = 0; title.textContent = 'PaddleOCR 精準模式已啟用'; text.textContent = '辨識將在這台電腦離線完成；不需要額外安裝。'; setOcrEngine('PaddleOCR 精準模式'); return; }
+  state.paddleAttempts += 1;
+  if (state.paddleAttempts >= 8) { title.textContent = 'PaddleOCR 暫未連線'; text.textContent = '讀取時會改用內建 OCR。若要使用精準模式，請關閉後重新開啟桌面程式。'; return; }
+  title.textContent = 'PaddleOCR 正在啟動'; text.textContent = '內建的精準辨識服務正在準備中；請稍候後再讀取文件。'; setTimeout(refreshPaddleSetup, 1500);
 }
-$('#paddleCheckBtn').addEventListener('click', refreshPaddleSetup);
-$('#paddleInstallBtn').addEventListener('click', async () => { const button = $('#paddleInstallBtn'); button.disabled = true; try { const response = await fetch('/api/start-paddleocr-install', { method: 'POST' }); if (response.status === 409) { await refreshPaddleSetup(); return; } if (!response.ok) throw new Error(); toast('安裝視窗已開啟；完成後重新開啟本網站。'); } catch { toast('無法啟動安裝器，請重新開啟本網站後再試。'); } finally { button.disabled = false; } });
 refreshPaddleSetup();
 async function runOcr() {
   if (!state.files.length) return;
@@ -95,8 +106,8 @@ async function runOcr() {
     let ocrText = ''; const addressTexts = [];
     if (source.images.length) {
       const paddle = await runPaddleOcr(source.images, setProgress);
-      if (paddle) { ocrText = paddle.ocrText; addressTexts.push(...paddle.addressTexts); }
-      else { const fallback = await runTesseractOcr(source.images, setProgress); ocrText = fallback.ocrText; addressTexts.push(...fallback.addressTexts); }
+      if (paddle) { setOcrEngine('PaddleOCR 精準模式'); ocrText = paddle.ocrText; addressTexts.push(...paddle.addressTexts); }
+      else { setOcrEngine('內建 OCR（備援）'); const fallback = await runTesseractOcr(source.images, setProgress); ocrText = fallback.ocrText; addressTexts.push(...fallback.addressTexts); }
     }    const ownerText = `${source.directText}\n${ocrText}`;
     setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(source.directText, ownerText, addressTexts); setProgress(100, '完成');
   } catch (error) { console.error(error); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
@@ -275,6 +286,10 @@ function extractAddress(raw, locality = '', database = { localities: [], aliases
   if (town) { const townIndex = text.indexOf(town); if (townIndex >= 0) return normalizeRoad(`${locality}${text.slice(townIndex + town.length)}`, locality, roadDatabase); }
   return text.length >= 6 ? text : '';
 }
+function selectBestAddress(structuredAddress, croppedOcrAddress) {
+  if (structuredAddress && /(?:市|縣).{2,}(?:區|鄉|鎮|市)/.test(structuredAddress)) return structuredAddress;
+  return croppedOcrAddress || structuredAddress;
+}
 function normalizeRoad(address, site, roadDatabase) {
   const roads = roadDatabase.sites?.[site] || [];
   if (!roads.length || roads.some(road => address.includes(road))) return address;
@@ -333,6 +348,7 @@ function extractLabelledOwners(text) {
   return records.filter(record => record.name && record.name.length <= 80 && record.name !== '姓名');
 }
 $('#ocrBtn').addEventListener('click', runOcr);
+setupDesktopUpdater();
 restoreDraft();
 
 
