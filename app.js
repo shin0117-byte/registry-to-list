@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const rows = $('#rows');
-const state = { files: [], ocrEngine: '', paddleAttempts: 0 };
+const state = { files: [], ocrEngine: '',  };
 const demo = [
   ['羅＊＊','','大溪區龍潭鄉三洽水字1243番地',1,9,'---.--.--','總登記','108.7.22未辦繼承列冊'],
   ['卓先生','','桃園市龍潭區三和里店湖一路22號',1,3,'080.01.29','買賣',''],
@@ -16,9 +16,9 @@ function addRow(data = []) {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
   tr.addEventListener('input', updateRow);
-  tr.querySelectorAll('textarea').forEach(autoGrowField);
+
   tr.querySelector('.delete-row').addEventListener('click', () => { tr.remove(); updateAll(); });
-  rows.append(tr); updateAll();
+  rows.append(tr); tr.querySelectorAll('textarea').forEach(autoGrowField); updateAll();
 }
 function genderFromId(id) {
   const normalized = id.trim().toUpperCase();
@@ -31,6 +31,7 @@ function formatOwnerName(name = '', id = '') {
   const title = gender === '男' ? '先生' : '小姐';
   return /[＊*]+/.test(value) ? value.replace(/[＊*]+/g, title) : `${value}${title}`;
 }
+function autoGrowField(field) { if (field?.tagName === 'TEXTAREA') { field.style.height = 'auto'; field.style.height = Math.max(30, field.scrollHeight) + 'px'; } }
 function updateRow(event) {
   autoGrowField(event.target);
   const tr = event.currentTarget; const id = tr.querySelector('[data-key="id"]').value;
@@ -86,18 +87,7 @@ function setupDesktopUpdater() {
 $('#addRowBtn').addEventListener('click',()=>addRow()); $('#area').addEventListener('input',updateAll); $('#saveBtn').addEventListener('click',saveDraft); $('#printBtn').addEventListener('click',exportPdf); $('#exportBtn').addEventListener('click',exportExcel);
 $('#loadDemoBtn').addEventListener('click',()=>{rows.innerHTML=''; demo.forEach(addRow); toast('已載入範例格式資料');});
 $('#sourceFile').addEventListener('change',(e)=>{state.files=[...e.target.files];$('#fileList').innerHTML=state.files.map(f=>`<div class="file-item">${escapeXml(f.name)}</div>`).join('');$('#ocrBtn').disabled=!state.files.length;});
-async function refreshPaddleSetup() {
-  const panel = $('#paddleSetup'); const title = $('#paddleSetupTitle'); const text = $('#paddleSetupText'); const localDownload = $('#localDownload');
-  const publicSite = !['127.0.0.1', 'localhost'].includes(location.hostname) && location.protocol !== 'file:';
-  if (publicSite) { panel.hidden = false; title.textContent = '使用精準 OCR，請下載本機版'; text.textContent = '公開網站無法啟動你電腦上的 OCR。桌面版已內建 PaddleOCR，不需要安裝 Python。'; localDownload.hidden = false; return; }
-  localDownload.hidden = true; panel.hidden = false;
-  const health = await fetch('http://127.0.0.1:8766/health', { signal: AbortSignal.timeout(1200) }).then(r => r.ok).catch(() => false);
-  if (health) { state.paddleAttempts = 0; title.textContent = 'PaddleOCR 精準模式已啟用'; text.textContent = '辨識將在這台電腦離線完成；不需要額外安裝。'; setOcrEngine('PaddleOCR 精準模式'); return; }
-  state.paddleAttempts += 1;
-  if (state.paddleAttempts >= 8) { title.textContent = 'PaddleOCR 暫未連線'; text.textContent = '讀取時會改用內建 OCR。若要使用精準模式，請關閉後重新開啟桌面程式。'; return; }
-  title.textContent = 'PaddleOCR 正在啟動'; text.textContent = '內建的精準辨識服務正在準備中；請稍候後再讀取文件。'; setTimeout(refreshPaddleSetup, 1500);
-}
-refreshPaddleSetup();
+refreshCloudSetup();
 async function runOcr() {
   if (!state.files.length) return;
   const button = $('#ocrBtn'); const mode = $('#readMode').value;
@@ -105,40 +95,19 @@ async function runOcr() {
   try {
 
     const source = await collectSourceContent(state.files, mode, (current, total) => { setProgress((current / total) * 20, `正在分析第 ${current}/${total} 頁`); });
+    setOcrEngine('PDF 文字讀取');
     let ocrText = ''; const addressTexts = [];
     if (source.images.length) {
-      const paddle = await runPaddleOcr(source.images, setProgress);
-      if (paddle) { setOcrEngine('PaddleOCR 精準模式'); ocrText = paddle.ocrText; addressTexts.push(...paddle.addressTexts); }
-      else { setOcrEngine('內建 OCR（備援）'); const fallback = await runTesseractOcr(source.images, setProgress); ocrText = fallback.ocrText; addressTexts.push(...fallback.addressTexts); }
+      setOcrEngine('Google Cloud Vision');
+      const result = await runGoogleOcr(source.images, setProgress);
+      ocrText = result.ocrText; addressTexts.push(...result.addressTexts);
     }    const ownerText = `${source.directText}\n${ocrText}`;
     setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(source.directText, ownerText, addressTexts); setProgress(100, '完成');
-  } catch (error) { console.error(error); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
+  } catch (error) { setProgress(0, '未完成：' + error.message); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
-async function runPaddleOcr(images, progress) {
-  try {
-    const probe = await fetch('http://127.0.0.1:8766/health', { signal: AbortSignal.timeout(1200) });
-    if (!probe.ok) return null;
-    let ocrText = ''; const addressTexts = [];
-    for (let index = 0; index < images.length; index += 1) {
-      const job = images[index]; progress(20 + (index / images.length) * 75, `PaddleOCR 精準辨識第 ${index + 1}/${images.length} 項`);
-      const image = await blobToBase64(job.blob);
-      const response = await fetch('http://127.0.0.1:8766/api/ocr', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }) });
-      const body = await response.json(); if (!response.ok) throw new Error(body.error || 'PaddleOCR 服務錯誤');
-      if (job.kind === 'address') addressTexts.push(body.text); else ocrText += `\n${body.text}`;
-    }
-    return { ocrText, addressTexts };
-  } catch (error) { console.info('PaddleOCR unavailable; using built-in OCR.', error); return null; }
-}
 function blobToBase64(blob) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = reject; reader.onload = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(blob); }); }
-async function runTesseractOcr(images, progress) {
-  if (!window.Tesseract) throw new Error('找不到 OCR 模組；請先執行 npm install。');
-  const localUrl = (path) => new URL(path, window.location.href).href; let ocrText = ''; const addressTexts = [];
-  let currentJob = 0; const totalJobs = images.length;
-  const worker = await Tesseract.createWorker('chi_tra', 1, { langPath: localUrl('ocr-assets'), workerPath: localUrl('vendor/worker.min.js'), corePath: localUrl('vendor/tesseract-core.wasm.js'), logger: (m) => { if (m.status === 'recognizing text') progress(20 + ((currentJob + m.progress) / totalJobs) * 75, `內建 OCR 辨識第 ${currentJob + 1}/${totalJobs} 項`); } });
-  for (let index = 0; index < images.length; index += 1) { currentJob = index; const job = images[index]; progress(20 + (index / totalJobs) * 75, `內建 OCR 辨識第 ${index + 1}/${totalJobs} 項`); await worker.setParameters({ tessedit_pageseg_mode: job.kind === 'address' ? '6' : '3' }); const result = await worker.recognize(job.blob); if (job.kind === 'address') addressTexts.push(result.data.text); else ocrText += `\n${result.data.text}`; }
-  await worker.terminate(); return { ocrText, addressTexts };
-}async function collectSourceContent(files, mode, progress) {
+async function collectSourceContent(files, mode, progress) {
   const images = []; let directText = ''; let insideOwnershipSection = false;
   const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
   const imageFiles = files.filter(file => !pdfFiles.includes(file));
@@ -161,7 +130,7 @@ async function runTesseractOcr(images, progress) {
     const otherRightsHeading = textContent.items.find(item => /土\s*地\s*他\s*項\s*權\s*利\s*部/.test(item.str));
     const idItems = insideOwnershipSection ? textContent.items.filter(item => /統\s*一\s*編\s*號/.test(item.str) && (!otherRightsHeading || item.transform[5] > otherRightsHeading.transform[5])) : [];
     const needsOcr = mode === 'ocr' || (mode === 'auto' && pageText.length < 70);
-    if (!needsOcr && !idItems.length) { if (hasOtherRights) insideOwnershipSection = false; continue; }
+    if (mode === 'direct' || (!needsOcr && !idItems.length)) { if (hasOtherRights) insideOwnershipSection = false; continue; }
     const viewport = page.getViewport({ scale: 3 });
     const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
@@ -356,13 +325,5 @@ function extractLabelledOwners(text) {
   return records.filter(record => record.name && record.name.length <= 80 && record.name !== '姓名');
 }
 $('#ocrBtn').addEventListener('click', runOcr);
-setupDesktopUpdater();
+
 restoreDraft();
-
-
-
-
-
-
-
-
