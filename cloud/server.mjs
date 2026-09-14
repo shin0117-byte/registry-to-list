@@ -1,3 +1,4 @@
+import {readGoogleUsage} from './usage.mjs';
 import {createServer} from 'node:http';
 import {readFile} from 'node:fs/promises';
 import {resolve, extname} from 'node:path';
@@ -20,8 +21,9 @@ async function googleVision(image) {
  if(!body.responses?.[0]) throw fail(502,'Google OCR 未回傳辨識結果');
  return body.responses[0].fullTextAnnotation?.text || body.responses[0].textAnnotations?.[0]?.description || '';
 }
-export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',project=process.env.GOOGLE_CLOUD_PROJECT || '',annotate=googleVision}={}) {
+export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',project=process.env.GOOGLE_CLOUD_PROJECT || '',annotate=googleVision,usageReader=readGoogleUsage}={}) {
  let windowStart=Date.now(),count=0;
+ let usageCache,usageFlight;
  const json=(res,status,body)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));};
  return createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');
@@ -30,6 +32,16 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
   try {
    const path=new URL(req.url,'http://localhost').pathname;
    if(path==='/api/health' && req.method==='GET') return json(res,200,{engine:'google-vision',configured:accessCode.length>=16 && !!project});
+   if(path==='/api/usage' && req.method==='GET'){
+    if(accessCode.length<16 || !project) throw fail(503,'雲端監控尚未設定完成');
+    const supplied=Buffer.from(req.headers.authorization || ''),expected=Buffer.from('Bearer '+accessCode);
+    if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected)) throw fail(401,'使用碼不正確，請向管理員確認');
+    if(!usageCache || Date.now()-usageCache.at>=300000 || usageCache.body.month!==new Date().toISOString().slice(0,7)){
+     if(!usageFlight) usageFlight=usageReader(project).then(body=>{usageCache={body,at:Date.now()};}).finally(()=>{usageFlight=null;});
+     await usageFlight;
+    }
+    return json(res,200,usageCache.body);
+   }
    if(path==='/api/ocr' && req.method==='POST'){
     if(accessCode.length<16 || !project) throw fail(503,'雲端 OCR 尚未設定完成');
     const supplied=Buffer.from(req.headers.authorization || ''),expected=Buffer.from('Bearer '+accessCode);

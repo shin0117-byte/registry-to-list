@@ -42,3 +42,28 @@ The access code is a simple shared credential, not per-user account management.
 node --test cloud/server.test.mjs cloud/frontend.test.mjs
 Tests use a fake OCR provider and do not send documents to Google or incur charges.
 Actual cloud deployment and a real Vision OCR sample remain necessary.
+
+## Project-wide Monitoring
+
+The website /api/usage reads serviceruntime.googleapis.com/api/request_count for
+consumed_api resources with service vision.googleapis.com, across the project.
+No browser storage or documents are used. Service account needs Monitoring Viewer;
+Monitoring API must be enabled. Run bash cloud/update-monitoring.sh in Cloud Shell
+to enable monitoring and deploy the update while preserving existing environment
+variables (including the OCR access code).
+The same OCR access code authorizes viewing project totals. Google records can
+lag by 30 minutes; the backend caches results for five minutes and the page polls
+every five minutes after an authorized manual read.
+
+The dashboard shows UTC month/day request counts. Costs are conditional estimates
+based ONLY on successful BatchAnnotateImages RPCs, assuming one image and one
+Document Text Detection feature per request, as implemented by this app.
+Other clients in the project can violate that assumption, and 2xx RPCs can contain
+image-level errors. API request counts must never be presented as billing units
+or actual billed cost. Empty series and permission failures remain explicit.
+No historical data is fabricated. Invoice/free allowance sharing and other costs
+are not known from these metrics. Official references:
+https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#serviceruntime
+https://cloud.google.com/vision/pricing
+
+Tests: node --test cloud/*.test.mjs

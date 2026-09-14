@@ -39,3 +39,44 @@ async function runGoogleOcr(images, progress) {
   }
   return {ocrText, addressTexts};
 }
+
+let usageTimer;
+async function refreshGoogleUsage() {
+  const status = document.querySelector('#usageStatus');
+  const button = document.querySelector('#refreshUsageBtn');
+  const code = document.querySelector('#cloudAccessCode').value.trim();
+  clearTimeout(usageTimer);
+  if (!code) { status.textContent = '請先輸入 OCR 使用碼。'; return; }
+  button.disabled = true;
+  status.textContent = '正在向 Google 讀取專案用量…';
+  let loaded = false;
+  try {
+    const response = await fetch(cloudBaseUrl() + '/api/usage', {
+      headers:{Authorization:'Bearer ' + code}, signal:AbortSignal.timeout(60000)
+    });
+    const body = await response.json().catch(() => ({}));
+    if (response.status === 404) throw new Error('雲端尚未更新監控功能，請管理員執行更新腳本。');
+    if (!response.ok || body.source !== 'google-cloud-monitoring') throw new Error(body.error || '無法讀取 Google 監控資料。');
+    for (const id of ['usageToday','usageMonthCount','usageResponses','usageImages','usageCost']) document.querySelector('#' + id).textContent = '—';
+    document.querySelector('#usageWithoutFree').textContent = '';
+    document.querySelector('#usageUpdated').textContent = body.month + '（UTC）・查詢時間：' + new Date(body.updatedAt).toLocaleString('zh-TW');
+    if (!body.hasData) {
+      status.textContent = 'Google 尚無此月份的可用監控資料；可能尚未呼叫或資料仍在延遲，不能視為 0 張。';
+    } else {
+      document.querySelector('#usageToday').textContent = body.todayRequests.toLocaleString() + ' 次';
+      document.querySelector('#usageMonthCount').textContent = body.requests.toLocaleString() + ' 次';
+      document.querySelector('#usageResponses').textContent = body.success.toLocaleString() + '／' + body.errors.toLocaleString();
+      document.querySelector('#usageImages').textContent = body.imageRequests.toLocaleString() + ' 次';
+      document.querySelector('#usageCost').textContent = 'US$ ' + body.estimateUsd.toFixed(4);
+      document.querySelector('#usageWithoutFree').textContent = '不折抵免費額度估算：US$ ' + body.estimateWithoutFreeUsd.toFixed(4);
+      status.textContent = '已讀取 Google 專案用量；費用為條件式估算。';
+    }
+    loaded = true;
+  } catch (error) {
+    status.textContent = '更新失敗：' + error.message + ' 如有舊數字，僅代表上次查詢。';
+  } finally {
+    button.disabled = false;
+    if (loaded) usageTimer = setTimeout(refreshGoogleUsage, 300000);
+  }
+}
+document.querySelector('#refreshUsageBtn')?.addEventListener('click', refreshGoogleUsage);

@@ -6,14 +6,15 @@ SERVICE=registry-ocr
 ACCOUNT=registry-ocr-service
 cd "$(dirname "$0")/.."
 gcloud projects describe "$PROJECT" --format='value(projectId)'
-gcloud services enable vision.googleapis.com run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com iam.googleapis.com --project="$PROJECT"
+gcloud services enable vision.googleapis.com monitoring.googleapis.com run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com iam.googleapis.com --project="$PROJECT"
 if ! gcloud iam service-accounts describe "$ACCOUNT@$PROJECT.iam.gserviceaccount.com" --project="$PROJECT" >/dev/null 2>&1; then
   gcloud iam service-accounts create "$ACCOUNT" --display-name="Registry OCR" --project="$PROJECT"
 fi
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$ACCOUNT@$PROJECT.iam.gserviceaccount.com" --role=roles/serviceusage.serviceUsageConsumer --condition=None >/dev/null
+gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$ACCOUNT@$PROJECT.iam.gserviceaccount.com" --role=roles/monitoring.viewer --condition=None >/dev/null
 STAGE=$(mktemp -d)
 mkdir -p "$STAGE/public/vendor"
-cp cloud/server.mjs cloud/Dockerfile "$STAGE/"
+cp cloud/server.mjs cloud/usage.mjs cloud/Dockerfile "$STAGE/"
 cp index.html app.js styles.css cloud-config.js cloud-ocr.js land-sections.json localities.json roads.json "$STAGE/public/"
 cp vendor/pdf.mjs vendor/pdf.worker.mjs "$STAGE/public/vendor/"
 read -r -s -p "請設定至少 16 字元的 OCR 使用碼（再次部署請輸入原使用碼）: " OCR_CODE

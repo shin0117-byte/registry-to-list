@@ -34,6 +34,27 @@
           <p id="ocrEngineStatus" class="hint ocr-engine" aria-live="polite">OCR：待載入文件後開始。</p>
           <p class="hint">智慧混合會優先讀取 PDF 原有文字；圖片住址、掃描頁或文字不足頁會使用 Google OCR；每個辨識圖片計入用量。</p>
         </section>
+        <section id="ocrUsage" class="panel usage-panel" aria-label="Google 專案用量">
+          <div class="section-title">Google OCR 專案用量</div>
+          <p class="hint">全專案、跨裝置統計｜來源：Google Cloud Monitoring</p>
+          <button id="refreshUsageBtn" class="secondary wide" type="button">讀取雲端用量</button>
+          <p id="usageStatus" class="hint" role="status">輸入上方 OCR 使用碼後，按此讀取。</p>
+          <dl class="usage-values">
+            <dt>今日 API 呼叫（UTC）</dt><dd id="usageToday">—</dd>
+            <dt>本月 API 呼叫（UTC）</dt><dd id="usageMonthCount">—</dd>
+            <dt>成功／失敗回應</dt><dd id="usageResponses">—</dd>
+            <dt>本月圖片辨識成功呼叫</dt><dd id="usageImages">—</dd>
+            <dt>估算 OCR 費用（美元）</dt><dd id="usageCost">—</dd>
+          </dl>
+          <p id="usageWithoutFree" class="hint"></p>
+          <p id="usageUpdated" class="hint"></p>
+          <p class="hint">讀取後每 5 分鐘更新；Google 指標可能延遲約 30 分鐘。查詢失敗或尚無資料時不當作 0。</p>
+          <p class="hint">費用假設每次圖片辨識呼叫僅送 1 張圖片、僅使用文件 OCR，且本月 1,000 張免費額度可用。本網站目前符合此呼叫方式；同專案其他程式若批次送圖或使用其他功能，估算會不準。成功回應也可能含個別圖片錯誤。</p>
+          <p class="hint">這不是 Google 帳單；未含 Cloud Run、建置、稅金與匯差。月份以 UTC 統計。Google API 呼叫次數不等於計費單位。</p>
+          <a class="text-btn" href="https://cloud.google.com/vision/pricing" target="_blank" rel="noopener">Google 官方費率</a>
+          <a class="text-btn" href="https://console.cloud.google.com/apis/api/vision.googleapis.com/metrics?project=registry-ocr-123456" target="_blank" rel="noopener">Google 用量圖表（管理員）</a>
+          <a class="text-btn" href="https://console.cloud.google.com/billing?project=registry-ocr-123456" target="_blank" rel="noopener">Google 實際帳單（管理員）</a>
+        </section>
       </aside>
 
       <section class="workspace">
