@@ -8,13 +8,24 @@ const demo = [
   ['羅先生','','桃園市桃園區三民里鎮撫街302號',1,9,'099.12.25','分割繼承','']
 ];
 
-function addRow(data = []) {
+function addRow(data = [], metadata = {}) {
   const fragment = $('#rowTemplate').content.cloneNode(true);
   const tr = fragment.querySelector('tr');
   const [name, id, address, numerator, denominator, date, reason, note] = data;
   Object.entries({name: formatOwnerName(name, id), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
+  tr.dataset.commonGroup = metadata.commonGroup || '';
+  tr.dataset.sequence = metadata.sequence || '';
+  tr.dataset.ocrImported = metadata.ocrImported ? 'true' : '';
+  const groupField = document.createElement('input');
+  groupField.className = 'common-group-input';
+  groupField.placeholder = '公同共有組別（同組填相同）';
+  groupField.title = '只合併相鄰且組別相同的持分與坪數；清空可拆開。';
+  groupField.value = metadata.commonGroup || '';
+  groupField.setAttribute('aria-label', '公同共有組別');
+  groupField.addEventListener('input', () => { tr.dataset.commonGroup = groupField.value.trim(); });
+  tr.querySelector('[data-key="note"]').parentElement.append(groupField);
   tr.addEventListener('input', updateRow);
 
   tr.querySelector('.delete-row').addEventListener('click', () => { tr.remove(); updateAll(); });
@@ -34,6 +45,13 @@ function formatOwnerName(name = '', id = '') {
 function autoGrowField(field) { if (field?.tagName === 'TEXTAREA') { field.style.height = 'auto'; field.style.height = Math.max(30, field.scrollHeight) + 'px'; } }
 function updateRow(event) {
   autoGrowField(event.target);
+  const sharedKey = event.target.dataset?.key;
+  const group = event.currentTarget.dataset.commonGroup;
+  if (group && ['numerator','denominator'].includes(sharedKey)) {
+    for (const member of rows.children) if (member.dataset.commonGroup === group) {
+      member.querySelector('[data-key="' + sharedKey + '"]').value = event.target.value;
+    }
+  }
   const tr = event.currentTarget; const id = tr.querySelector('[data-key="id"]').value;
   tr.querySelector('.gender').textContent = genderFromId(id);
   const name = tr.querySelector('[data-key="name"]'); name.value = formatOwnerName(name.value, id);
@@ -48,29 +66,73 @@ function updateAll() {
     tr.querySelector('.share-area').textContent = (area * numerator / denominator * 0.3025).toFixed(2);
     tr.querySelector('.gender').textContent = genderFromId(tr.querySelector('[data-key="id"]').value);
   });
+  mergeCommonCells();
   $('#totalArea').textContent = (area * 0.3025).toFixed(2);
   $('#totalRatio').textContent = `總面積 ${area.toLocaleString('zh-TW',{maximumFractionDigits:2})} m²　約 ${(area * .3025).toLocaleString('zh-TW',{maximumFractionDigits:2})} 坪`;
 }
 function toast(text) { const t=$('#toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
 function setProgress(_percent, label) { $('#ocrEngineStatus').textContent = state.ocrEngine ? `OCR：${state.ocrEngine}｜${label}` : `OCR：${label}`; }
 function setOcrEngine(name) { state.ocrEngine = name; $('#ocrEngineStatus').textContent = `OCR：${name}`; }
-function getData() { return [...rows.children].map(tr => Object.fromEntries(['name','id','address','numerator','denominator','date','reason','note'].map(key => [key, tr.querySelector(`[data-key="${key}"]`).value]))); }
+function getData() {
+  return [...rows.children].map(tr => ({
+    ...Object.fromEntries(['name','id','address','numerator','denominator','date','reason','note'].map(key => [key, tr.querySelector('[data-key="' + key + '"]').value])),
+    commonGroup:tr.dataset.commonGroup || '', sequence:tr.dataset.sequence || '',
+    ocrImported:tr.dataset.ocrImported === 'true'
+  }));
+}
+function commonSpans(items) {
+  const spans = items.map(() => 1);
+  for (let i = 0; i < items.length;) {
+    let end = i + 1;
+    const lead = items[i];
+    if (lead.commonGroup) while (end < items.length && items[end].commonGroup === lead.commonGroup &&
+      String(items[end].numerator) === String(lead.numerator) &&
+      String(items[end].denominator) === String(lead.denominator)) end++;
+    spans[i] = end - i;
+    for (let j = i + 1; j < end; j++) spans[j] = 0;
+    i = end;
+  }
+  return spans;
+}
+function mergeCommonCells() {
+  const spans = commonSpans(getData());
+  [...rows.children].forEach((tr, i) => {
+    // Keep hidden controls in the DOM for drafts, row deletion and per-owner data.
+    for (const index of [4,5,6,7]) {
+      const cell = tr.children[index];
+      cell.rowSpan = spans[i] || 1;
+      cell.style.display = spans[i] === 0 ? 'none' : '';
+      cell.classList.toggle('common-share', Boolean(tr.dataset.commonGroup && spans[i] > 1));
+    }
+  });
+}
+function buildExportRows(items, area) {
+  const spans = commonSpans(items);
+  return items.map((row,i) => {
+    const shared = spans[i] ? '<td class="export-share" rowspan="' + spans[i] + '">' +
+      escapeXml(row.numerator) + '／' + escapeXml(row.denominator) + '</td><td class="export-share" rowspan="' +
+      spans[i] + '">' + (area * Number(row.numerator || 0) / Number(row.denominator || 1) * .3025).toFixed(2) + '</td>' : '';
+    return '<tr><td>' + (i + 1) + '</td><td><span class="export-name">' + escapeXml(row.name) +
+      '</span></td><td><span class="export-address">' + escapeXml(row.address || '—') + '</span></td>' + shared +
+      '<td>' + escapeXml(row.date) + '</td><td>' + escapeXml(row.reason) + '</td><td>' + escapeXml(row.note) + '</td></tr>';
+  }).join('');
+}
 function saveDraft() { localStorage.setItem('registry-draft', JSON.stringify({fields:Object.fromEntries(['district','section','parcel','area','value','zoning','building'].map(k=>[k,$('#'+k).value])), rows:getData()})); toast('草稿已儲存於本機瀏覽器'); }
-function restoreDraft() { try { const d=JSON.parse(localStorage.getItem('registry-draft')); if (!d) return; Object.entries(d.fields).forEach(([k,v])=>$('#'+k).value=v); d.rows.forEach(r=>addRow([r.name,r.id || '',r.address,r.numerator,r.denominator,r.date,r.reason,r.note])); } catch {} }
+function restoreDraft() { try { const d=JSON.parse(localStorage.getItem('registry-draft')); if (!d) return; Object.entries(d.fields).forEach(([k,v])=>$('#'+k).value=v); d.rows.forEach(r=>addRow([r.name,r.id || '',r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r)); } catch {} }
 function escapeXml(value='') { return String(value).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 function exportExcel() {
   const title = `${$('#district').value}${$('#section').value}${$('#parcel').value}地號清冊`;
   const items = getData(); const area=Number($('#area').value)||0;
   const head = ['次序','姓名','地址','持分','持分坪數','原因發生日期','登記原因','備註'];
-  const body = items.map((r,i)=>`<tr><td>${i+1}</td><td>${escapeXml(r.name)}</td><td>${escapeXml(r.address)}</td><td>${escapeXml(r.numerator)}／${escapeXml(r.denominator)}</td><td>${(area*Number(r.numerator||0)/Number(r.denominator||1)*.3025).toFixed(2)}</td><td>${escapeXml(r.date)}</td><td>${escapeXml(r.reason)}</td><td>${escapeXml(r.note)}</td></tr>`).join('');
-  const html=`<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:'Microsoft JhengHei'}td,th{border:1px solid #555;padding:6px}th{background:#dcebe7}.title{font-size:16pt;font-weight:bold;text-align:left}</style></head><body><table><tr><th class="title" colspan="8">${escapeXml(title)}　總面積：${area.toLocaleString()}m²　約 ${(area*.3025).toFixed(2)}坪　公告現值：${$('#value').value}/m²</th></tr><tr><td colspan="8">${escapeXml($('#zoning').value)}　建號：${escapeXml($('#building').value)}</td></tr><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr>${body}<tr><td colspan="4">合計</td><td>${(area*.3025).toFixed(2)}</td><td colspan="3"></td></tr></table></body></html>`;
+  const body = buildExportRows(items, area);
+  const html=`<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:'Microsoft JhengHei'}td,th{border:1px solid #555;padding:6px;vertical-align:top;white-space:normal;overflow-wrap:anywhere}.export-share{vertical-align:middle;text-align:center}.export-name{display:block;width:7em}.export-address{display:block;width:15em}th{background:#dcebe7}.title{font-size:16pt;font-weight:bold;text-align:left}</style></head><body><table><tr><th class="title" colspan="8">${escapeXml(title)}　總面積：${area.toLocaleString()}m²　約 ${(area*.3025).toFixed(2)}坪　公告現值：${$('#value').value}/m²</th></tr><tr><td colspan="8">${escapeXml($('#zoning').value)}　建號：${escapeXml($('#building').value)}</td></tr><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr>${body}<tr><td colspan="4">合計</td><td>${(area*.3025).toFixed(2)}</td><td colspan="3"></td></tr></table></body></html>`;
   const blob=new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${title}.xls`; a.click(); URL.revokeObjectURL(a.href); toast('已匯出 Excel 相容清冊');
 }
 function exportPdf() {
   const title = `${$('#district').value}${$('#section').value}${$('#parcel').value}地號清冊`;
   const area = Number($('#area').value) || 0; const items = getData();
-  const rowsHtml = items.map((row, index) => `<tr><td>${index + 1}</td><td>${escapeXml(row.name)}</td><td>${escapeXml(row.address || '—')}</td><td>${escapeXml(row.numerator)}／${escapeXml(row.denominator)}</td><td>${(area * Number(row.numerator || 0) / Number(row.denominator || 1) * .3025).toFixed(2)}</td><td>${escapeXml(row.date)}</td><td>${escapeXml(row.reason)}</td><td>${escapeXml(row.note)}</td></tr>`).join('');
-  const documentHtml = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escapeXml(title)}</title><style>@page{size:A4 landscape;margin:12mm}body{font-family:'Microsoft JhengHei',sans-serif;color:#17212b;font-size:10pt}h1{font-size:16pt;margin:0 0 5px}.meta{margin:0 0 12px;line-height:1.65;color:#334854}table{width:100%;border-collapse:collapse}th,td{border:1px solid #9baeb5;padding:5px 6px;vertical-align:top}th{background:#e4efed;white-space:nowrap}tr{break-inside:avoid}td:nth-child(1),td:nth-child(4),td:nth-child(5),td:nth-child(6){text-align:center;white-space:nowrap}.footer{margin-top:8px;font-size:9pt;color:#455b66}</style></head><body><h1>${escapeXml(title)}</h1><p class="meta">總面積：${area.toLocaleString('zh-TW',{maximumFractionDigits:2})} m²　約 ${(area * .3025).toLocaleString('zh-TW',{maximumFractionDigits:2})} 坪　公告現值：${escapeXml($('#value').value || '—')} 元／m²<br>${escapeXml($('#zoning').value)}　${escapeXml($('#building').value)}</p><table><thead><tr><th>次序</th><th>姓名</th><th>地址</th><th>持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th></tr></thead><tbody>${rowsHtml}</tbody></table><p class="footer">本清冊由謄本轉清冊系統於本機產生。</p><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
+  const rowsHtml = buildExportRows(items, area);
+  const documentHtml = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escapeXml(title)}</title><style>@page{size:A3 landscape;margin:12mm}body{font-family:'Microsoft JhengHei',sans-serif;color:#17212b;font-size:10pt}h1{font-size:16pt;margin:0 0 5px}.meta{margin:0 0 12px;line-height:1.65;color:#334854}table{width:100%;border-collapse:collapse}th,td{border:1px solid #9baeb5;padding:5px 6px;vertical-align:top}th{background:#e4efed;white-space:nowrap}tr{break-inside:avoid}.export-share{text-align:center;vertical-align:middle;overflow-wrap:anywhere}.export-name{display:block;width:7em;overflow-wrap:anywhere}.export-address{display:block;width:15em;overflow-wrap:anywhere}.footer{margin-top:8px;font-size:9pt;color:#455b66}</style></head><body><h1>${escapeXml(title)}</h1><p class="meta">總面積：${area.toLocaleString('zh-TW',{maximumFractionDigits:2})} m²　約 ${(area * .3025).toLocaleString('zh-TW',{maximumFractionDigits:2})} 坪　公告現值：${escapeXml($('#value').value || '—')} 元／m²<br>${escapeXml($('#zoning').value)}　${escapeXml($('#building').value)}</p><table><thead><tr><th>次序</th><th>姓名</th><th>地址</th><th>持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th></tr></thead><tbody>${rowsHtml}</tbody></table><p class="footer">本清冊由謄本轉清冊系統於本機產生。</p><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
   const output = window.open('', '_blank'); if (!output) return toast('瀏覽器阻擋了 PDF 視窗，請允許彈出視窗後再試。');
   output.document.write(documentHtml); output.document.close();
 }
@@ -170,7 +232,7 @@ function rebuildPdfLines(items) {
   return lines.sort((a, b) => b.y - a.y).map(line => line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ')).join('\n');
 }
 async function applyExtractedData(landText, ownerText, addressTexts = []) {
-  [...rows.children].filter(tr => /自動辨識|謄本未載住址|地址辨識|地址 OCR/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
+  [...rows.children].filter(tr => tr.dataset.ocrImported === 'true' || /自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
   const cleanLand = landText.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
   const fields = extractLandFields(cleanLand); let filled = 0;
   const mappedDistrict = await lookupDistrict(fields.section);
@@ -191,7 +253,11 @@ async function applyExtractedData(landText, ownerText, addressTexts = []) {
   owners = groupCommonOwnership(owners);
   const existing = new Set([...rows.children].map(tr => [tr.dataset.sequence, tr.querySelector('[data-key="name"]').value, tr.querySelector('[data-key="id"]').value].join('|')));
   const newOwners = owners.filter(owner => { const key = [owner.sequence || '', owner.name, owner.id].join('|'); if (!owner.name || existing.has(key)) return false; existing.add(key); return true; });
-  newOwners.forEach(owner => { const note = owner.common ? `公同共有（${owner.members.length}人；持分坪數合併計算）` : (owner.address ? '地址辨識，請校對' : (owner.addressAvailable ? '地址 OCR 未辨識' : '謄本未載住址')); addRow([owner.name, owner.id, owner.address, owner.numerator, owner.denominator, owner.date, owner.reason, note]); rows.lastElementChild.dataset.sequence = owner.sequence || ''; });
+  newOwners.forEach(owner => {
+    const note = owner.common ? '公同共有（組別與住址請校對）' : (owner.address ? '地址辨識，請校對' : (owner.addressAvailable ? '地址 OCR 未辨識' : '謄本未載住址'));
+    addRow([owner.name,owner.id,owner.address,owner.numerator,owner.denominator,owner.date,owner.reason,note],
+      {commonGroup:owner.commonGroup,sequence:owner.sequence,ocrImported:true});
+  });
   updateAll();
   toast(`讀取完成：土地資料帶入 ${filled} 項，新增權利人 ${newOwners.length} 筆。`);
 }
@@ -292,14 +358,17 @@ function editDistance(a, b) {
   return previous[b.length];
 }
 function groupCommonOwnership(owners) {
-  const grouped = new Map(); const singles = [];
-  for (const owner of owners) {
-    if (!owner.common) { singles.push(owner); continue; }
-    const key = `${owner.numerator}/${owner.denominator}`;
-    const group = grouped.get(key) || { ...owner, name: '', id: '', address: '', common: true, members: [], sequence: `common-${key}` };
-    group.members.push(owner.name); grouped.set(key, group);
-  }
-  return [...singles, ...[...grouped.values()].map(group => ({ ...group, name: group.members.join('、') }))];
+  let previousKey = '', currentGroup = '';
+  const prefix = '共-' + Date.now().toString(36) + '-';
+  return owners.map((owner,index) => {
+    if (!owner.common) { previousKey = ''; currentGroup = ''; return {...owner,commonGroup:''}; }
+    // Never collapse owner records. Without an explicit group reference, only
+    // adjacent matching share/date/reason records form a provisional group.
+    const key = JSON.stringify([String(owner.numerator),String(owner.denominator),owner.date || '',owner.reason || '',owner.commonGroup || '']);
+    if (key !== previousKey) currentGroup = owner.commonGroup || prefix + (index + 1);
+    previousKey = key;
+    return {...owner,commonGroup:currentGroup};
+  });
 }
 function extractLabelledOwners(text) {
   const compact = text.replace(/\r/g, '');
