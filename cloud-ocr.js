@@ -1,3 +1,11 @@
+function ocrRetrySeconds(response, body) {
+  const header = response.headers?.get('Retry-After');
+  let seconds = Number(body.retryAfterSeconds);
+  if (header) seconds = /^\d+(\.\d+)?$/.test(header.trim()) ? Number(header) : (Date.parse(header) - Date.now()) / 1000;
+  if (!Number.isFinite(seconds) || seconds <= 0) seconds = 61;
+  if (seconds > 3600) throw new Error('服務要求較長等待時間，請稍後再試。');
+  return Math.ceil(seconds);
+}
 function cloudBaseUrl() {
   const configured = window.REGISTRY_OCR_URL || '';
   if (configured && new URL(configured).protocol !== 'https:') throw new Error('雲端 OCR 網址必須使用 HTTPS');
@@ -27,13 +35,30 @@ async function runGoogleOcr(images, progress) {
     const job = images[index];
     if (job.blob.size > 7 * 1024 * 1024) throw new Error('圖片超過 7 MB，請縮小後重試');
     progress(20 + index / images.length * 75, 'Google OCR 辨識第 ' + (index + 1) + '/' + images.length + ' 項');
-    const response = await fetch(cloudBaseUrl() + '/api/ocr', {
-      method:'POST', signal:AbortSignal.timeout(90000),
-      headers:{'Content-Type':'application/json','Authorization':'Bearer ' + code},
-      body:JSON.stringify({image:await blobToBase64(job.blob)})
-    });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok || typeof body.text !== 'string') throw new Error(body.error || 'Google OCR 暫時無法使用，請稍後重試');
+    const image = await blobToBase64(job.blob);
+    let body;
+    for (let attempt = 0; ; attempt++) {
+      const response = await fetch(cloudBaseUrl() + '/api/ocr', {
+        method:'POST', signal:AbortSignal.timeout(90000),
+        headers:{'Content-Type':'application/json','Authorization':'Bearer ' + code},
+        body:JSON.stringify({image})
+      });
+      body = await response.json().catch(() => ({}));
+      if (response.status === 429) {
+        if (attempt >= 3) throw new Error('服務持續繁忙，已自動等待重試 3 次；請稍後再試。');
+        const seconds = ocrRetrySeconds(response, body);
+        for (let remaining = seconds; remaining > 0; remaining--) {
+          progress(20 + index / images.length * 75,
+            '服務限流，' + remaining + ' 秒後自動繼續第 ' + (index + 1) + '/' + images.length
+            + ' 項（已完成 ' + index + ' 項，本次不重跑；重試 ' + (attempt + 1) + '/3）。請保持頁面開啟。');
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+        progress(20 + index / images.length * 75, '正在繼續 Google OCR 第 ' + (index + 1) + '/' + images.length + ' 項');
+        continue;
+      }
+      if (!response.ok || typeof body.text !== 'string') throw new Error(body.error || 'Google OCR 暫時無法使用，請稍後重試');
+      break;
+    }
     if (job.kind === 'address') addressTexts.push(body.text);
     else ocrText += '\n' + body.text;
   }
