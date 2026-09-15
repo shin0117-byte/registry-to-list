@@ -18,3 +18,28 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
 .owner-table td input,.owner-table td textarea{width:100%;min-width:0}.owner-table td input[data-key="name"]{width:102px;min-width:102px}.owner-table textarea{display:block;border:0;background:transparent;padding:5px;resize:none;overflow:hidden;font:inherit;line-height:1.35;white-space:pre-wrap;overflow-wrap:anywhere}.owner-table td:nth-child(5) textarea,.owner-table td:nth-child(7) textarea{text-align:center}.owner-table td:nth-child(4) textarea{min-height:48px}
 @media print{@page{size:A3 landscape;margin:10mm}.owner-table{min-width:0!important;width:100%;font-size:9pt}.owner-table .col-serial{width:3%}.owner-table .col-name{width:8%}.owner-table .col-gender{width:7%}.owner-table .col-address{width:23%}.owner-table .col-numerator{width:5%}.owner-table .col-slash{width:2%}.owner-table .col-denominator{width:5%}.owner-table .col-share{width:7%}.owner-table .col-date{width:9%}.owner-table .col-reason{width:7%}.owner-table .col-note{width:12%}.owner-table .col-action{width:2%}.owner-table td textarea{padding:0!important;border:0!important;overflow:visible;height:auto!important;min-height:0!important}}
 .usage-values{margin:14px 0;display:grid;gap:5px}.usage-values dt{font-size:11px;color:var(--muted)}.usage-values dd{margin:0 0 9px;font-size:19px;color:var(--teal);overflow-wrap:anywhere}.usage-panel p{margin:9px 0}.usage-panel a{display:block;margin-top:8px}@media print{.usage-panel{display:none!important}}
+
+/* Keep wide registers inside their own scroll area and use the available screen. */
+@media screen {
+  .topbar { padding-inline:24px; }
+  .hero,.workflow,.layout { max-width:none; }
+  .layout { grid-template-columns:245px minmax(0,1fr); }
+  .workspace,.workspace > .panel,.sidebar,.form-grid > label { min-width:0; }
+  .workspace { grid-template-columns:minmax(0,1fr); }
+  .form-grid { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .form-grid input { min-width:0; }
+  .paddle-setup,.update-banner { max-width:none; margin-inline:24px; }
+}
+@media screen and (max-width:760px) {
+  .topbar { padding-inline:16px; gap:12px; justify-content:space-between; }
+  .layout { grid-template-columns:minmax(0,1fr); }
+  .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .paddle-setup,.update-banner { margin-inline:14px; }
+  .section-heading { flex-wrap:wrap; gap:12px; }
+}
+@media screen and (max-width:420px) {
+  .brand { font-size:15px; }
+  .brand small { display:none; }
+  .form-grid { grid-template-columns:minmax(0,1fr); }
+  .form-grid .full { grid-column:1; }
+}
