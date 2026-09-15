@@ -9,32 +9,30 @@
 <body>
   <header class="topbar">
     <div class="brand"><span class="brand-mark">簿</span><span>謄本轉清冊 <small>線上版</small></span></div>
-    <div class="privacy"><span class="dot"></span>圖片透過 Google 雲端辨識</div>
+    <div class="privacy"><span class="dot"></span>文件線上辨識</div>
     <div class="actions"><button id="saveBtn" class="ghost">儲存草稿</button><button id="printBtn" class="primary">匯出 PDF</button></div>
   </header>
 
   <main>
     <section class="hero">
-      <div><p class="eyebrow">LAND REGISTRY WORKFLOW</p><h1>把謄本，快速整理成<br><em>可直接列印</em>的清冊。</h1><p class="intro">加入掃描圖片或 PDF，使用 Google Cloud Vision 辨識；辨識結果可逐筆校正，再匯出 Excel 相容檔案。</p></div>
-      <div class="hero-note"><strong>線上辨識</strong><span>需要 OCR 的圖片會送至 Google 處理，可能包含姓名、地址與身分證字號；請確認有權使用文件。</span></div>
+      <div><p class="eyebrow">LAND REGISTRY WORKFLOW</p><h1>把謄本，快速整理成<br><em>可直接列印</em>的清冊。</h1><p class="intro">加入掃描圖片或 PDF，自動整合文字與圖片辨識；辨識結果可逐筆校正，再匯出 Excel 相容檔案。</p></div>
+      <div class="hero-note"><strong>線上辨識</strong><span>需要辨識的頁面會送至雲端服務處理，可能包含姓名、地址與身分證字號；請確認有權使用文件。</span></div>
     </section>
-    <section class="paddle-setup" aria-live="polite">
+    <section hidden class="paddle-setup" aria-live="polite">
       <div><p class="eyebrow">GOOGLE CLOUD VISION</p><h2 id="cloudTitle">正在確認 Google OCR 連線…</h2><p id="cloudDetail">請稍候。</p></div>
     </section><div class="layout">
       <aside class="sidebar">
         <section class="panel source-panel"><div class="section-title"><span>來源謄本</span><small>選填</small></div>
           <label class="dropzone" for="sourceFile"><input id="sourceFile" type="file" accept="application/pdf,image/*" multiple hidden><span class="upload-icon">↥</span><strong>加入謄本 PDF 或掃描圖片</strong><small>PDF、JPG、PNG、TIFF</small></label>
-          <label class="mode-label">讀取模式
-            <select id="readMode"><option value="ocr">整份 Google OCR（建議）</option><option value="auto">智慧混合（文字＋住址 OCR）</option><option value="direct">僅讀取 PDF 文字</option></select>
-          </label>
-          <label class="mode-label">OCR 使用碼<input id="cloudAccessCode" type="password" autocomplete="off" placeholder="管理員提供的使用碼（不是 Google 金鑰）"></label>
-<label class="hint" style="display:flex;gap:8px;margin-top:12px"><input id="cloudConsent" type="checkbox" style="width:auto">我同意將需辨識的圖片傳送至 Google Cloud Vision。</label>
+          <input id="readMode" type="hidden" value="auto">
+          <label class="mode-label">OCR 使用碼<input id="cloudAccessCode" type="password" autocomplete="off" placeholder="請輸入使用碼"></label>
+<label class="hint" style="display:flex;gap:8px;margin-top:12px"><input id="cloudConsent" type="checkbox" style="width:auto">我同意將文件頁面傳送至雲端辨識。</label>
 <div id="fileList" class="file-list"></div>
           <button id="ocrBtn" class="wide secondary" disabled>讀取並自動帶入</button>
           <p id="ocrEngineStatus" class="hint ocr-engine" aria-live="polite">OCR：待載入文件後開始。</p>
-          <p class="hint">整份 Google OCR：PDF 每頁送出一張圖片，姓名與住址一起辨識，不另外重複裁切住址。每頁計 1 個文件 OCR 單位；Google 配額仍適用。智慧混合可另選。</p>
+          <p class="hint">每頁辨識一次，搭配文件原有文字補足資料；有差異的欄位會標示請校對。</p>
         </section>
-        <section id="ocrUsage" class="panel usage-panel" aria-label="Google 專案用量">
+        <section hidden id="ocrUsage" class="panel usage-panel" aria-label="Google 專案用量">
           <div class="section-title">Google OCR 專案用量</div>
           <p class="hint">全專案、跨裝置統計｜來源：Google Cloud Monitoring</p>
           <button id="refreshUsageBtn" class="secondary wide" type="button">讀取雲端用量</button>

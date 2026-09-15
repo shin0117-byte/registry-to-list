@@ -26,15 +26,15 @@ async function refreshCloudSetup() {
   }
 }
 async function runGoogleOcr(images, progress) {
-  if (!document.querySelector('#cloudConsent').checked) throw new Error('請先勾選同意將圖片傳送至 Google 進行辨識');
+  if (!document.querySelector('#cloudConsent').checked) throw new Error('請先勾選同意將文件頁面傳送至雲端辨識');
   const code = document.querySelector('#cloudAccessCode').value.trim();
   if (!code) throw new Error('請輸入管理員提供的使用碼');
   let ocrText = '';
-  const addressTexts = [];
+  const addressTexts = []; const pageResults = [];
   for (let index = 0; index < images.length; index++) {
     const job = images[index];
     if (job.blob.size > 7 * 1024 * 1024) throw new Error('圖片超過 7 MB，請縮小後重試');
-    progress(20 + index / images.length * 75, 'Google OCR 辨識第 ' + (index + 1) + '/' + images.length + ' 項');
+    progress(20 + index / images.length * 75, 'OCR 辨識第 ' + (index + 1) + '/' + images.length + ' 項');
     const image = await blobToBase64(job.blob);
     let body;
     for (let attempt = 0; ; attempt++) {
@@ -53,16 +53,16 @@ async function runGoogleOcr(images, progress) {
             + ' 項（已完成 ' + index + ' 項，本次不重跑；重試 ' + (attempt + 1) + '/3）。請保持頁面開啟。');
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
-        progress(20 + index / images.length * 75, '正在繼續 Google OCR 第 ' + (index + 1) + '/' + images.length + ' 項');
+        progress(20 + index / images.length * 75, '正在繼續 OCR 第 ' + (index + 1) + '/' + images.length + ' 項');
         continue;
       }
-      if (!response.ok || typeof body.text !== 'string') throw new Error(body.error || 'Google OCR 暫時無法使用，請稍後重試');
+      if (!response.ok || typeof body.text !== 'string') throw new Error(String(body.error || 'OCR 暫時無法使用，請稍後重試').replace(/Google(?: Cloud Vision)?(?: OCR)?/gi,'辨識服務'));
       break;
     }
     if (job.kind === 'address') addressTexts.push(body.text);
-    else ocrText += '\n' + body.text;
+    else { ocrText += '\n' + body.text; pageResults.push({pageKey:job.pageKey,text:body.text}); }
   }
-  return {ocrText, addressTexts};
+  return {ocrText, addressTexts, pageResults};
 }
 
 let usageTimer;

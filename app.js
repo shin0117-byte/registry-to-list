@@ -71,8 +71,8 @@ function updateAll() {
   $('#totalRatio').textContent = `總面積 ${area.toLocaleString('zh-TW',{maximumFractionDigits:2})} m²　約 ${(area * .3025).toLocaleString('zh-TW',{maximumFractionDigits:2})} 坪`;
 }
 function toast(text) { const t=$('#toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
-function setProgress(_percent, label) { $('#ocrEngineStatus').textContent = state.ocrEngine ? `OCR：${state.ocrEngine}｜${label}` : `OCR：${label}`; }
-function setOcrEngine(name) { state.ocrEngine = name; $('#ocrEngineStatus').textContent = `OCR：${name}`; }
+function setProgress(_percent, label) { $('#ocrEngineStatus').textContent = 'OCR：' + label; }
+function setOcrEngine(name) { state.ocrEngine = name; }
 function getData() {
   return [...rows.children].map(tr => ({
     ...Object.fromEntries(['name','id','address','numerator','denominator','date','reason','note'].map(key => [key, tr.querySelector('[data-key="' + key + '"]').value])),
@@ -158,51 +158,111 @@ async function runOcr() {
 
     const source = await collectSourceContent(state.files, mode, (current, total) => { setProgress((current / total) * 20, `正在分析第 ${current}/${total} 頁`); });
     setOcrEngine('PDF 文字讀取');
-    let ocrText = ''; const addressTexts = [];
+    let ocrText = ''; const addressTexts = []; let pageResults = [];
     if (source.images.length) {
       setOcrEngine('Google Cloud Vision');
       const result = await runGoogleOcr(source.images, setProgress);
-      ocrText = result.ocrText; addressTexts.push(...result.addressTexts);
+      ocrText = result.ocrText; addressTexts.push(...result.addressTexts); pageResults = result.pageResults || [];
     }
     const ownerText = chooseExtractionText(mode, source.directText, ocrText);
-    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts); setProgress(100, '完成');
+    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, mode === 'auto' ? reconcileDocumentPages(source.pages, pageResults) : null); setProgress(100, '完成');
   } catch (error) { setProgress(0, '未完成：' + error.message); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
 function chooseExtractionText(mode, directText, ocrText) { return mode === 'ocr' ? ocrText : directText + '\n' + ocrText; }
 function blobToBase64(blob) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = reject; reader.onload = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(blob); }); }
 async function collectSourceContent(files, mode, progress, loadPdf = () => import('./vendor/pdf.mjs')) {
-  const images = []; let directText = ''; let insideOwnershipSection = false;
+  const images = [], pages = []; let directText = '';
   const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
   const imageFiles = files.filter(file => !pdfFiles.includes(file));
-  if (mode !== 'direct') images.push(...imageFiles.map(blob => ({ kind: 'page', blob })));
-  if (!pdfFiles.length) return { images, directText };
+  imageFiles.forEach((blob,index) => {
+    const pageKey = 'image-' + index;
+    pages.push({pageKey,fileKey:pageKey,directText:''});
+    if (mode !== 'direct') images.push({kind:'page',blob,pageKey});
+  });
+  if (!pdfFiles.length) return {images,directText,pages};
   const pdfjs = await loadPdf();
   pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.mjs';
-  const documents = await Promise.all(pdfFiles.map(async file => pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise));
-  const totalPages = documents.reduce((sum, pdfDocument) => sum + pdfDocument.numPages, 0);
+  const documents = await Promise.all(pdfFiles.map(async file => pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise));
+  const totalPages = documents.reduce((sum,pdf) => sum + pdf.numPages,0);
   let pageNumber = 0;
-  for (const pdfDocument of documents) for (let pageIndex = 1; pageIndex <= pdfDocument.numPages; pageIndex += 1) {
-    pageNumber += 1; progress(pageNumber, totalPages);
-    const page = await pdfDocument.getPage(pageIndex);
-    const textContent = mode === 'ocr' ? {items:[]} : await page.getTextContent();
-    const pageText = textContent.items.map(item => item.str).join(' ').replace(/\s+/g, ' ').trim();
-    directText += `\n${rebuildPdfLines(textContent.items)}`;
-    const hasOwnershipStart = /土\s*地\s*所\s*有\s*權\s*部/.test(pageText);
-    const hasOtherRights = /土\s*地\s*他\s*項\s*權\s*利\s*部/.test(pageText);
-    if (hasOwnershipStart) insideOwnershipSection = true;
-    const otherRightsHeading = textContent.items.find(item => /土\s*地\s*他\s*項\s*權\s*利\s*部/.test(item.str));
-    const idItems = insideOwnershipSection ? textContent.items.filter(item => /統\s*一\s*編\s*號/.test(item.str) && (!otherRightsHeading || item.transform[5] > otherRightsHeading.transform[5])) : [];
-    const needsOcr = mode === 'ocr' || (mode === 'auto' && pageText.length < 70);
-    if (mode === 'direct' || (!needsOcr && !idItems.length)) { if (hasOtherRights) insideOwnershipSection = false; continue; }
-    const viewport = page.getViewport({ scale: 3 });
-    const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
-    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-    if (needsOcr) images.push({ kind: 'page', blob: await new Promise(resolve => canvas.toBlob(resolve, 'image/png')) });
-    for (const idItem of (mode === 'ocr' ? [] : idItems)) images.push({ kind: 'address', blob: await cropAddressLine(canvas, viewport, idItem) });
-    if (hasOtherRights) insideOwnershipSection = false;
+  for (let fileIndex = 0; fileIndex < documents.length; fileIndex++) {
+    const pdfDocument = documents[fileIndex];
+    for (let pageIndex = 1; pageIndex <= pdfDocument.numPages; pageIndex++) {
+      progress(++pageNumber,totalPages);
+      const page = await pdfDocument.getPage(pageIndex);
+      const textContent = mode === 'ocr' ? {items:[]} : await page.getTextContent().catch(error => { if (mode === 'direct') throw error; return {items:[]}; });
+      const pageText = rebuildPdfLines(textContent.items);
+      const pageKey = 'pdf-' + fileIndex + '-' + pageIndex;
+      pages.push({pageKey,fileKey:'pdf-' + fileIndex,directText:pageText});
+      directText += '\n' + pageText;
+      if (mode === 'direct') continue;
+      // One full-page image serves every owner; never submit extra address crops.
+      const viewport = page.getViewport({scale:3});
+      const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+      const blob = await new Promise(resolve => canvas.toBlob(resolve,'image/png'));
+      if (!blob) throw new Error('頁面影像產生失敗，請重新讀取。');
+      images.push({kind:'page',blob,pageKey});
+    }
   }
-  return { images, directText };
+  return {images,directText,pages};
+}
+function parsedOwners(text) {
+  const section = isolateOwnershipSection(text);
+  return extractOwners(section,section.replace(/\s+/g,' ').trim());
+}
+function reconcileDocumentPages(pages = [], results = []) {
+  const recognized = new Map(results.map(result => [result.pageKey,result.text]));
+  const documents = new Map();
+  for (const page of pages) {
+    if (!documents.has(page.fileKey)) documents.set(page.fileKey,{direct:[],ocr:[]});
+    const doc = documents.get(page.fileKey);
+    doc.direct.push(page.directText); doc.ocr.push(recognized.get(page.pageKey) || '');
+  }
+  const owners = [];
+  for (const [fileKey,doc] of documents) {
+    const direct = doc.direct.join('\n'), ocr = doc.ocr.join('\n');
+    owners.push(...reconcileOwners(parsedOwners(direct),parsedOwners(ocr)).map(owner => ({
+      ...owner, sequence:fileKey + ':' + (owner.registrationSequence || owner.sequence || ''),
+      documentKey:fileKey
+    })));
+  }
+  return owners;
+}
+function reconcileOwners(directOwners, ocrOwners) {
+  const merged = directOwners.map(owner => ({...owner,review:[]}));
+  const used = new Set();
+  const normalize = value => String(value || '').replace(/[\s＊*]/g,'').replace(/台/g,'臺');
+  const usable = value => Boolean(String(value || '').trim()) && !/[�□]/.test(String(value));
+  for (const scanned of ocrOwners) {
+    // Registration sequence is scoped to a single document; never pair by row position.
+    const key = scanned.registrationSequence || scanned.sequence;
+    let matches = merged.map((owner,index) => ({owner,index})).filter(({owner,index}) =>
+      !used.has(index) && key && (owner.registrationSequence || owner.sequence) === key);
+    if (!matches.length && !key) matches = merged.map((owner,index) => ({owner,index})).filter(({owner,index}) =>
+      !used.has(index) && !owner.registrationSequence && !owner.sequence &&
+      /^[A-Z][12]\d{8}$/.test(scanned.id || '') && owner.id === scanned.id && normalize(owner.name) === normalize(scanned.name));
+    if (matches.length !== 1) {
+      merged.push({...scanned,review:directOwners.length ? ['影像補入：請校對是否為遺漏或重複權利人'] : []});
+      used.add(merged.length - 1); continue;
+    }
+    const {owner,index} = matches[0]; used.add(index);
+    const labels = {name:'姓名',id:'身分證字號',address:'住址',date:'日期',reason:'登記原因'};
+    for (const [field,label] of Object.entries(labels)) {
+      if (!usable(owner[field]) && usable(scanned[field])) owner[field] = scanned[field];
+      else if (usable(owner[field]) && usable(scanned[field]) && normalize(owner[field]) !== normalize(scanned[field]))
+        owner.review.push(label + '不一致；影像：' + scanned[field]);
+    }
+    if (owner.shareAvailable === false && scanned.shareAvailable !== false) {
+      owner.numerator = scanned.numerator; owner.denominator = scanned.denominator; owner.shareAvailable = true;
+    } else if (scanned.shareAvailable !== false &&
+      (String(owner.numerator) !== String(scanned.numerator) || String(owner.denominator) !== String(scanned.denominator)))
+      owner.review.push('持分不一致；影像：' + scanned.numerator + '／' + scanned.denominator);
+    if (owner.common !== scanned.common) owner.review.push('公同共有標示不一致');
+    owner.common = owner.common || scanned.common;
+  }
+  return merged.map(owner => owner.shareAvailable === false ? {...owner,numerator:'',denominator:'',review:[...owner.review,'持分未辨識，請校對']} : owner);
 }
 async function cropAddressLine(canvas, viewport, idItem) {
   const scale = viewport.scale; const idY = idItem.transform[5];
@@ -231,7 +291,7 @@ function rebuildPdfLines(items) {
   }
   return lines.sort((a, b) => b.y - a.y).map(line => line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ')).join('\n');
 }
-async function applyExtractedData(landText, ownerText, addressTexts = []) {
+async function applyExtractedData(landText, ownerText, addressTexts = [], reconciledOwners = null) {
   [...rows.children].filter(tr => tr.dataset.ocrImported === 'true' || /自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
   const cleanLand = landText.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
   const fields = extractLandFields(cleanLand); let filled = 0;
@@ -240,7 +300,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = []) {
   for (const [id, value] of Object.entries(fields)) if (value && (!$('#' + id).value.trim() || (id === 'district' && mappedDistrict))) { $('#' + id).value = value; filled += 1; }
   const ownershipSection = isolateOwnershipSection(ownerText);
   const cleanOwners = ownershipSection.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
-  let owners = extractOwners(ownershipSection, cleanOwners);
+  let owners = reconciledOwners === null ? extractOwners(ownershipSection, cleanOwners) : reconciledOwners;
   const localityDatabase = await loadLocalities();
   const roadDatabase = await loadRoads();
   const documentHasAddress = addressTexts.length > 0 || /住\s*[址阯]/.test(ownershipSection);
@@ -255,7 +315,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = []) {
   const newOwners = owners.filter(owner => { const key = [owner.sequence || '', owner.name, owner.id].join('|'); if (!owner.name || existing.has(key)) return false; existing.add(key); return true; });
   newOwners.forEach(owner => {
     const note = owner.common ? '公同共有（組別與住址請校對）' : (owner.address ? '地址辨識，請校對' : (owner.addressAvailable ? '地址 OCR 未辨識' : '謄本未載住址'));
-    addRow([owner.name,owner.id,owner.address,owner.numerator,owner.denominator,owner.date,owner.reason,note],
+    addRow([owner.name,owner.id,owner.address,owner.numerator,owner.denominator,owner.date,owner.reason,[note,...(owner.review || [])].join('；')],
       {commonGroup:owner.commonGroup,sequence:owner.sequence,ocrImported:true});
   });
   updateAll();
@@ -364,7 +424,7 @@ function groupCommonOwnership(owners) {
     if (!owner.common) { previousKey = ''; currentGroup = ''; return {...owner,commonGroup:''}; }
     // Never collapse owner records. Without an explicit group reference, only
     // adjacent matching share/date/reason records form a provisional group.
-    const key = JSON.stringify([String(owner.numerator),String(owner.denominator),owner.date || '',owner.reason || '',owner.commonGroup || '']);
+    const key = JSON.stringify([String(owner.numerator),String(owner.denominator),owner.date || '',owner.reason || '',owner.commonGroup || '',owner.documentKey || '']);
     if (key !== previousKey) currentGroup = owner.commonGroup || prefix + (index + 1);
     previousKey = key;
     return {...owner,commonGroup:currentGroup};
@@ -372,7 +432,7 @@ function groupCommonOwnership(owners) {
 }
 function extractLabelledOwners(text) {
   const compact = text.replace(/\r/g, '');
-  const startPattern = /(?=(?:[（(]?\s*\d{1,4}\s*[)）]?\s*)?登\s*記\s*次\s*序)/g;
+  const startPattern = /(?:[（(]?\s*\d{1,4}\s*[)）]?\s*)?登\s*記\s*次\s*序/g;
   const starts = [...compact.matchAll(startPattern)].map(match => match.index);
   const blocks = starts.length ? starts.map((start, index) => compact.slice(start, starts[index + 1] || compact.length)) : [compact];
   const valueAfter = (block, label) => {
@@ -383,7 +443,7 @@ function extractLabelledOwners(text) {
     const sequence = block.match(/[（(]\s*(\d{4})\s*[)）]/)?.[1] || '';
     const name = valueAfter(block, '所\\s*有\\s*權\\s*人').replace(/^(姓名|所有權人)$/, '');
     const id = valueAfter(block, '統\\s*一\\s*編\\s*號').replace(/^(統一編號|身分證字號)$/, '');
-    const address = valueAfter(block, '住\\s*址');
+    const address = (block.match(/住\s*[址阯]\s*[：:]?\s*([\s\S]*?)(?=\s*(?:權\s*利\s*範\s*圍|權\s*狀\s*字\s*號|當\s*期\s*申\s*報|登\s*記\s*原\s*因|原\s*因\s*發\s*生\s*日\s*期)|$)/)?.[1] || '').replace(/\s+/g,'');
     const reason = valueAfter(block, '登\\s*記\\s*原\\s*因');
     const date = valueAfter(block, '原\\s*因\\s*發\\s*生\\s*日\\s*期').replace(/[年月]/g, '.').replace('日', '');
     const shareText = valueAfter(block, '權\\s*利\\s*範\\s*圍');
@@ -391,7 +451,8 @@ function extractLabelledOwners(text) {
     const slashShare = shareText.match(/(\d+)\s*[\/／]\s*(\d+)/);
     const numerator = chineseShare?.[2] || slashShare?.[1] || 1;
     const denominator = chineseShare?.[1] || slashShare?.[2] || 1;
-    return { sequence, name, id, address, numerator, denominator, date, reason, common: /公\s*同\s*共\s*有/.test(shareText) };
+    const registrationSequence = block.match(/登\s*記\s*次\s*序\s*[：:]?\s*(\d{4}(?:-\d{3})?)/)?.[1] || '';
+    return { sequence, registrationSequence, shareAvailable:Boolean(chineseShare || slashShare), name, id, address, numerator, denominator, date, reason, common: /公\s*同\s*共\s*有/.test(shareText) };
   }).filter(record => record.name || record.id || record.address);
   return records.filter(record => record.name && record.name.length <= 80 && record.name !== '姓名');
 }
