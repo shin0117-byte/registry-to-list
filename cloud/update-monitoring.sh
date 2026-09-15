@@ -15,4 +15,4 @@ cp cloud/server.mjs cloud/usage.mjs cloud/Dockerfile "$STAGE/"
 cp index.html app.js styles.css cloud-config.js cloud-ocr.js land-sections.json localities.json roads.json "$STAGE/public/"
 cp vendor/pdf.mjs vendor/pdf.worker.mjs "$STAGE/public/vendor/"
 gcloud run deploy "$SERVICE" --source="$STAGE" --project="$PROJECT" --region="$REGION" --quiet
-printf '\n監控版本已部署。原 OCR 使用碼保持不變。\n'
+printf '\n新版服務已部署。原 OCR 使用碼保持不變。\n'

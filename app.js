@@ -101,19 +101,21 @@ async function runOcr() {
       setOcrEngine('Google Cloud Vision');
       const result = await runGoogleOcr(source.images, setProgress);
       ocrText = result.ocrText; addressTexts.push(...result.addressTexts);
-    }    const ownerText = `${source.directText}\n${ocrText}`;
-    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(source.directText, ownerText, addressTexts); setProgress(100, '完成');
+    }
+    const ownerText = chooseExtractionText(mode, source.directText, ocrText);
+    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts); setProgress(100, '完成');
   } catch (error) { setProgress(0, '未完成：' + error.message); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
+function chooseExtractionText(mode, directText, ocrText) { return mode === 'ocr' ? ocrText : directText + '\n' + ocrText; }
 function blobToBase64(blob) { return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = reject; reader.onload = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(blob); }); }
-async function collectSourceContent(files, mode, progress) {
+async function collectSourceContent(files, mode, progress, loadPdf = () => import('./vendor/pdf.mjs')) {
   const images = []; let directText = ''; let insideOwnershipSection = false;
   const pdfFiles = files.filter(file => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'));
   const imageFiles = files.filter(file => !pdfFiles.includes(file));
   if (mode !== 'direct') images.push(...imageFiles.map(blob => ({ kind: 'page', blob })));
   if (!pdfFiles.length) return { images, directText };
-  const pdfjs = await import('./vendor/pdf.mjs');
+  const pdfjs = await loadPdf();
   pdfjs.GlobalWorkerOptions.workerSrc = './vendor/pdf.worker.mjs';
   const documents = await Promise.all(pdfFiles.map(async file => pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise));
   const totalPages = documents.reduce((sum, pdfDocument) => sum + pdfDocument.numPages, 0);
@@ -121,7 +123,7 @@ async function collectSourceContent(files, mode, progress) {
   for (const pdfDocument of documents) for (let pageIndex = 1; pageIndex <= pdfDocument.numPages; pageIndex += 1) {
     pageNumber += 1; progress(pageNumber, totalPages);
     const page = await pdfDocument.getPage(pageIndex);
-    const textContent = await page.getTextContent();
+    const textContent = mode === 'ocr' ? {items:[]} : await page.getTextContent();
     const pageText = textContent.items.map(item => item.str).join(' ').replace(/\s+/g, ' ').trim();
     directText += `\n${rebuildPdfLines(textContent.items)}`;
     const hasOwnershipStart = /土\s*地\s*所\s*有\s*權\s*部/.test(pageText);
@@ -135,7 +137,7 @@ async function collectSourceContent(files, mode, progress) {
     const canvas = document.createElement('canvas'); canvas.width = viewport.width; canvas.height = viewport.height;
     await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
     if (needsOcr) images.push({ kind: 'page', blob: await new Promise(resolve => canvas.toBlob(resolve, 'image/png')) });
-    for (const idItem of idItems) images.push({ kind: 'address', blob: await cropAddressLine(canvas, viewport, idItem) });
+    for (const idItem of (mode === 'ocr' ? [] : idItems)) images.push({ kind: 'address', blob: await cropAddressLine(canvas, viewport, idItem) });
     if (hasOtherRights) insideOwnershipSection = false;
   }
   return { images, directText };

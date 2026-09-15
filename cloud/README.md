@@ -32,8 +32,8 @@ inference. Verify one authorized sample after deployment before calling it ready
 ## Limits
 
 One request accepts one image of up to 7 MiB; each image/crop counts as one Vision
-unit. The per-instance limit is 60 authenticated requests per minute.
-Max instances is 1, but instance replacement or deployment can reset local limits;
+unit. There is no application-imposed per-minute OCR request cap.
+Google Vision quotas still apply. Max instances is 1;
 this is not a monthly spending cap. Configure Google API quotas separately.
 The access code is a simple shared credential, not per-user account management.
 
@@ -67,3 +67,19 @@ https://docs.cloud.google.com/monitoring/api/metrics_gcp_p_z#serviceruntime
 https://cloud.google.com/vision/pricing
 
 Tests: node --test cloud/*.test.mjs
+
+## Full-document mode and removal of application rate cap
+
+The default frontend mode renders every PDF page to one image, sends each page
+sequentially to Google Document Text Detection and uses only that OCR output for
+land and owner parsing. Full mode does not additionally upload address crops.
+Mixed mode remains optional. Repeating a completed run produces new billable calls.
+No guarantee of perfect OCR accuracy is made.
+
+The previous 60 requests/minute application cap has been removed.
+Authentication, image validation, file limits and Google quotas remain.
+Google 429/RESOURCE_EXHAUSTED responses retain a retryable 429 status;
+the frontend performs the existing bounded countdown retries.
+Run bash cloud/update-service.sh to update the deployed backend without changing
+the access code. Until that finishes, the old backend's 60/minute cap still applies.
+Health version: full-page-2026-09-15; appRateLimit: null.

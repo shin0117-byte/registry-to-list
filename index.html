@@ -25,14 +25,14 @@
         <section class="panel source-panel"><div class="section-title"><span>來源謄本</span><small>選填</small></div>
           <label class="dropzone" for="sourceFile"><input id="sourceFile" type="file" accept="application/pdf,image/*" multiple hidden><span class="upload-icon">↥</span><strong>加入謄本 PDF 或掃描圖片</strong><small>PDF、JPG、PNG、TIFF</small></label>
           <label class="mode-label">讀取模式
-            <select id="readMode"><option value="auto">智慧混合（建議）</option><option value="direct">僅讀取 PDF 文字</option><option value="ocr">全部以 OCR 掃描</option></select>
+            <select id="readMode"><option value="ocr">整份 Google OCR（建議）</option><option value="auto">智慧混合（文字＋住址 OCR）</option><option value="direct">僅讀取 PDF 文字</option></select>
           </label>
           <label class="mode-label">OCR 使用碼<input id="cloudAccessCode" type="password" autocomplete="off" placeholder="管理員提供的使用碼（不是 Google 金鑰）"></label>
 <label class="hint" style="display:flex;gap:8px;margin-top:12px"><input id="cloudConsent" type="checkbox" style="width:auto">我同意將需辨識的圖片傳送至 Google Cloud Vision。</label>
 <div id="fileList" class="file-list"></div>
           <button id="ocrBtn" class="wide secondary" disabled>讀取並自動帶入</button>
           <p id="ocrEngineStatus" class="hint ocr-engine" aria-live="polite">OCR：待載入文件後開始。</p>
-          <p class="hint">智慧混合會優先讀取 PDF 原有文字；圖片住址、掃描頁或文字不足頁會使用 Google OCR；每個辨識圖片計入用量。</p>
+          <p class="hint">整份 Google OCR：PDF 每頁送出一張圖片，姓名與住址一起辨識，不另外重複裁切住址。每頁計 1 個文件 OCR 單位；Google 配額仍適用。智慧混合可另選。</p>
         </section>
         <section id="ocrUsage" class="panel usage-panel" aria-label="Google 專案用量">
           <div class="section-title">Google OCR 專案用量</div>
