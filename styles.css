@@ -46,3 +46,11 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
 .owner-table .common-share{vertical-align:middle;background:#f1f7f6}.owner-table td .common-group-input{font-size:10px;display:block;width:100%;min-width:0;border-top:1px dashed #cbd7dd;padding:4px 2px;color:#526473}.owner-table td textarea{max-width:100%}
 
 [hidden]{display:none!important}
+
+.admin-page label{display:block;margin:12px 0;line-height:1.6}
+.admin-page select,.admin-page textarea{display:block;width:100%;box-sizing:border-box;border:1px solid #cbd7dd;border-radius:5px;padding:10px;font:inherit;background:white;color:#19384a}
+.admin-page input[type=checkbox]{width:auto;display:inline-block}
+.admin-page #newCode{font-family:monospace;overflow-wrap:anywhere}
+.admin-page button{margin:4px 6px 4px 0}
+.admin-page th,.admin-page td{padding:10px;text-align:left;overflow-wrap:anywhere}
+.admin-page pre{max-height:360px;overflow:auto}

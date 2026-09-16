@@ -165,7 +165,7 @@ async function runOcr() {
       ocrText = result.ocrText; addressTexts.push(...result.addressTexts); pageResults = result.pageResults || [];
     }
     const ownerText = chooseExtractionText(mode, source.directText, ocrText);
-    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, mode === 'auto' ? reconcileDocumentPages(source.pages, pageResults) : null); setProgress(100, '完成');
+    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, mode === 'auto' ? reconcileDocumentPages(source.pages, pageResults) : null); setProgress(100, '完成'); window.prepaid?.finish();
   } catch (error) { setProgress(0, '未完成：' + error.message); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }

@@ -18,6 +18,7 @@ async function refreshCloudSetup() {
     const response = await fetch(cloudBaseUrl() + '/api/health', {signal: AbortSignal.timeout(8000)});
     const body = await response.json();
     if (!response.ok || body.engine !== 'google-vision' || !body.configured) throw new Error();
+    window.prepaid?.configure(body.billingEnabled);
     title.textContent = 'Google Cloud Vision OCR 已連線';
     detail.textContent = '辨識時會將圖片住址或掃描頁傳送至 Google；辨識結果仍須逐筆校對。';
   } catch {
@@ -29,6 +30,7 @@ async function runGoogleOcr(images, progress) {
   if (!document.querySelector('#cloudConsent').checked) throw new Error('請先勾選同意將文件頁面傳送至雲端辨識');
   const code = document.querySelector('#cloudAccessCode').value.trim();
   if (!code) throw new Error('請輸入管理員提供的使用碼');
+  await window.prepaid?.prepare(images, code);
   let ocrText = '';
   const addressTexts = []; const pageResults = [];
   for (let index = 0; index < images.length; index++) {
@@ -38,7 +40,7 @@ async function runGoogleOcr(images, progress) {
     const image = await blobToBase64(job.blob);
     let body;
     for (let attempt = 0; ; attempt++) {
-      const response = await fetch(cloudBaseUrl() + '/api/ocr', {
+      const response = window.prepaid?.active ? await window.prepaid.request(index,image,code,progress) : await fetch(cloudBaseUrl() + '/api/ocr', {
         method:'POST', signal:AbortSignal.timeout(90000),
         headers:{'Content-Type':'application/json','Authorization':'Bearer ' + code},
         body:JSON.stringify({image})
@@ -56,9 +58,11 @@ async function runGoogleOcr(images, progress) {
         progress(20 + index / images.length * 75, '正在繼續 OCR 第 ' + (index + 1) + '/' + images.length + ' 項');
         continue;
       }
+      if(!response.ok && body.refunded)window.prepaid?.release(index);
       if (!response.ok || typeof body.text !== 'string') throw new Error(String(body.error || 'OCR 暫時無法使用，請稍後重試').replace(/Google(?: Cloud Vision)?(?: OCR)?/gi,'辨識服務'));
       break;
     }
+    window.prepaid?.record(index,body);
     if (job.kind === 'address') addressTexts.push(body.text);
     else { ocrText += '\n' + body.text; pageResults.push({pageKey:job.pageKey,text:body.text}); }
   }

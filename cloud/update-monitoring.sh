@@ -11,8 +11,8 @@ gcloud services enable monitoring.googleapis.com --project="$PROJECT"
 gcloud projects add-iam-policy-binding "$PROJECT" --member="serviceAccount:$ACCOUNT" --role=roles/monitoring.viewer --condition=None >/dev/null
 STAGE=$(mktemp -d)
 mkdir -p "$STAGE/public/vendor"
-cp cloud/server.mjs cloud/usage.mjs cloud/Dockerfile "$STAGE/"
-cp index.html app.js styles.css cloud-config.js cloud-ocr.js land-sections.json localities.json roads.json "$STAGE/public/"
+cp cloud/server.mjs cloud/usage.mjs cloud/billing.mjs cloud/firestore-store.mjs cloud/Dockerfile "$STAGE/"
+cp index.html admin.html admin.js billing-client.js app.js styles.css cloud-config.js cloud-ocr.js land-sections.json localities.json roads.json "$STAGE/public/"
 cp vendor/pdf.mjs vendor/pdf.worker.mjs "$STAGE/public/vendor/"
 gcloud run deploy "$SERVICE" --source="$STAGE" --project="$PROJECT" --region="$REGION" --quiet
 printf '\n新版服務已部署。原 OCR 使用碼保持不變。\n'
