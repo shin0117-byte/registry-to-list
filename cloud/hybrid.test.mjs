@@ -104,7 +104,7 @@ test('OCR conflicts replace owner fields and retain both values for review',()=>
  const c=setup(),direct={...base,shareAvailable:true,numerator:'1',denominator:'2',common:true,address:'舊路1號',date:'民國110.01.01',reason:'買賣'};
  const scan={...direct,name:'李＊＊',address:'新路2號',numerator:'3',denominator:'4',common:false,date:'民國111.01.01',reason:'繼承'};
  const result=c.reconcileOwners([direct],[scan])[0];
- for(const key of ['name','address','date','reason','numerator','denominator','common'])assert.equal(result[key],scan[key]);
+ for(const key of ['name','address','date','numerator','denominator','common'])assert.equal(result[key],scan[key]);
  assert.ok(result.review.some(x=>x.includes('文字：舊路1號；採用OCR：新路2號')));
  assert.ok(result.review.some(x=>x.includes('文字：1／2；採用OCR：3／4')));
  const missing=c.reconcileOwners([direct],[{...scan,address:'',shareAvailable:false}])[0];
@@ -129,4 +129,17 @@ test('watermark decode failures safely retain original image and do not call OCR
  const jobs=[{blob,pageKey:'one'},{blob,pageKey:'two'}];
  await c.prepareWatermarkImages(jobs,()=>{});
  assert.equal(jobs.length,2);assert.equal(jobs[0].blob,blob);assert.equal(jobs[1].pageKey,'two');
+});
+test('invalid ID is not recorded, trailing name digits removed, reason prefers text',()=>{
+ const c=setup();
+ const direct={...base,name:'林＊＊',id:'A123****89',reason:'買賣'};
+ const scan={...base,name:'林＊＊123',id:'A123****891',reason:'繼承'};
+ const r=c.reconcileOwners([direct],[scan])[0];
+ assert.equal(r.id,direct.id);assert.equal(r.name,'林＊＊');assert.equal(r.reason,'買賣');
+ assert.ok(r.review.some(x=>x.includes('採用文字：買賣；OCR：繼承')));
+ assert.ok(r.review.some(x=>x.includes('非10碼')));
+ assert.equal(c.validateOwnerIdentity(scan).id,'');
+ assert.equal(c.validateOwnerIdentity({name:'王＊＊１２',id:'A12'}).name,'王＊＊');
+ assert.equal(c.genderFromId('A123****891'),'—');
+ assert.equal(c.reconcileOwners([{...direct,reason:''}],[scan])[0].reason,'繼承');
 });

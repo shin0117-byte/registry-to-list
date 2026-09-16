@@ -11,7 +11,8 @@ const demo = [
 function addRow(data = [], metadata = {}) {
   const fragment = $('#rowTemplate').content.cloneNode(true);
   const tr = fragment.querySelector('tr');
-  const [name, id, address, numerator, denominator, date, reason, note] = data;
+  let [name, id, address, numerator, denominator, date, reason, note] = data;
+  const checked = validateOwnerIdentity({name,id}); name=checked.name; id=checked.id; note=[note,...checked.review].filter(Boolean).join('；');
   Object.entries({name: formatOwnerName(name, id), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
@@ -33,7 +34,7 @@ function addRow(data = [], metadata = {}) {
 }
 function genderFromId(id) {
   const normalized = id.trim().toUpperCase();
-  if (!/^[A-Z][12]/.test(normalized)) return '—';
+  if (normalized.length !== 10 || !/^[A-Z][12]/.test(normalized)) return '—';
   return normalized[1] === '1' ? '男' : '女';
 }
 function formatOwnerName(name = '', id = '') {
@@ -277,8 +278,16 @@ function reconcileLandFields(directText, ocrText) {
   }
   return {fields,review};
 }
+function validateOwnerIdentity(owner) {
+  const review=[...(owner.review || [])];
+  let name=String(owner.name || '').trim(),id=String(owner.id || '').replace(/\s/g,'');
+  if(id && id.length!==10){review.push('身分證字號長度非10碼，未登載，請校對');id='';}
+  if(/[0-9０-９]+$/.test(name)){name=name.replace(/[0-9０-９]+$/,'').trim();review.push('姓名尾端數字已移除，請校對');}
+  return {...owner,name,id,review};
+}
 function reconcileOwners(directOwners, ocrOwners) {
-  const merged = directOwners.map(owner => ({...owner,review:[]}));
+  directOwners=directOwners.map(validateOwnerIdentity); ocrOwners=ocrOwners.map(validateOwnerIdentity);
+  const merged = directOwners.map(owner => ({...owner,review:[...(owner.review || [])]}));
   const used = new Set();
   const normalize = value => String(value || '').replace(/[\s＊*]/g,'').replace(/台/g,'臺');
   const usable = value => Boolean(String(value || '').trim()) && !/[�□]/.test(String(value));
@@ -291,12 +300,13 @@ function reconcileOwners(directOwners, ocrOwners) {
       !used.has(index) && !owner.registrationSequence && !owner.sequence &&
       /^[A-Z][12]\d{8}$/.test(scanned.id || '') && owner.id === scanned.id && normalize(owner.name) === normalize(scanned.name));
     if (matches.length !== 1) {
-      merged.push({...scanned,review:directOwners.length ? ['影像補入：請校對是否為遺漏或重複權利人'] : []});
+      merged.push({...scanned,review:[...(scanned.review || []),...(directOwners.length ? ['影像補入：請校對是否為遺漏或重複權利人'] : [])]});
       used.add(merged.length - 1); continue;
     }
-    const {owner,index} = matches[0]; used.add(index);
+    const {owner,index} = matches[0]; used.add(index); owner.review.push(...(scanned.review || []));
     const labels = {name:'姓名',id:'身分證字號',address:'住址',date:'日期',reason:'登記原因'};
     for (const [field,label] of Object.entries(labels)) {
+      if (field === 'reason' && usable(owner.reason) && usable(scanned.reason) && normalize(owner.reason) !== normalize(scanned.reason)) { owner.review.push('登記原因不一致；採用文字：' + owner.reason + '；OCR：' + scanned.reason); continue; }
       if (!usable(owner[field]) && usable(scanned[field])) owner[field] = scanned[field];
       else if (usable(owner[field]) && usable(scanned[field]) && normalize(owner[field]) !== normalize(scanned[field]))
         { owner.review.push(label + '不一致；文字：' + owner[field] + '；採用OCR：' + scanned[field]); owner[field] = scanned[field]; }
