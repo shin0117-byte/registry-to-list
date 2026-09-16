@@ -41,7 +41,16 @@ async function load(reset=true){
    await api('/api/admin/status',{accountId:a.id,active:!a.active,requestId});await load();message('客戶狀態已更新');
   }));
   history.addEventListener('click',()=>guarded(history,()=>loadHistory(a.id,true)));
-  td.append(toggle,history);tr.append(td);tbody.append(tr);
+  const remove=document.createElement('button'),deleteRequestId=crypto.randomUUID();remove.textContent='刪除';
+  remove.addEventListener('click',()=>guarded(remove,async()=>{
+   const name=prompt('刪除「'+a.name+'」後，使用碼立即失效並從清單移除。\n剩餘 '+a.balance+' 點將保留但不能使用，不會自動退款；帳務紀錄保留。\n請輸入完整客戶名稱確認：');
+   if(name===null)return;
+   if(name!==a.name)throw new Error('名稱不符，未刪除客戶');
+   await api('/api/admin/delete',{accountId:a.id,requestId:deleteRequestId,confirmName:name});
+   hide();adminEl('newCode').value='';createDraft=null;
+   await load();message('客戶已刪除，使用碼已失效；帳務紀錄保留');
+  }));
+  td.append(toggle,history,remove);tr.append(td);tbody.append(tr);
  }
  if(accounts.some(a=>a.id===old))select.value=old;
  adminEl('moreAccounts').hidden=!nextCursor;
@@ -49,8 +58,8 @@ async function load(reset=true){
 async function loadHistory(id,reset){
  const data=await api('/api/admin/history?id='+encodeURIComponent(id)+(reset?'':'&cursor='+encodeURIComponent(historyCursor)));
  historyAccount=id;historyCursor=data.nextCursor;
- const labels={trial:'試用',credit:'加點',ocr:'OCR',status:'狀態',code_view:'查看使用碼'};
- const statuses={credited:'已加點',completed:'已扣點',pending:'保留點數中',refunded:'已退點',enabled:'啟用',disabled:'停用',viewed:'已查看'};
+ const labels={trial:'試用',credit:'加點',ocr:'OCR',status:'狀態',code_view:'查看使用碼',delete:'刪除客戶'};
+ const statuses={credited:'已加點',completed:'已扣點',pending:'保留點數中',refunded:'已退點',enabled:'啟用',disabled:'停用',viewed:'已查看',deleted:'已刪除'};
  const text=data.items.map(x=>new Date(x.createdAt).toLocaleString()+'　'+(labels[x.type]||x.type)+'　'+(statuses[x.status]||x.status)+'　'+x.points+' 點'+(x.twd?'　NT$'+x.twd:'')+(x.note?'　'+x.note:'')).join('\n');
  adminEl('history').textContent=reset?text:adminEl('history').textContent+'\n'+text;
  adminEl('moreHistory').hidden=!historyCursor;

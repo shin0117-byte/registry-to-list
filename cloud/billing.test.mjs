@@ -185,3 +185,54 @@ test('code reveal endpoint requires admin authentication and prevents caching',a
   assert.equal(r.status,200);assert.match(r.headers.get('cache-control'),/no-store/);assert.equal((await r.json()).code,code);
  }finally{await new Promise(r=>server.close(r));}
 });
+test('customer deletion hides account, revokes code and preserves accounting without revival',async()=>{
+ const {billing,store,id}=await setup(10);
+ const input={accountId:id,requestId:rid,confirmName:'測試客戶'};
+ await assert.rejects(billing.remove({...input,confirmName:'wrong'}),e=>e.status===400);
+ assert.equal((await billing.list()).items.length,1);
+ await billing.remove(input);await billing.remove(input);
+ assert.equal((await billing.list()).items.length,0);
+ await assert.rejects(billing.account(code),e=>e.status===401);
+ await assert.rejects(billing.reveal({accountId:id,requestId:rid}),e=>e.status===409);
+ await assert.rejects(billing.status({accountId:id,requestId:rid,active:true}),e=>e.status===409);
+ await assert.rejects(billing.credit({accountId:id,requestId:rid,plan:'light',note:'test'}),e=>e.status===409);
+ await assert.rejects(billing.create({customerRef:'C1',name:'測試客戶',code}),e=>e.status===409);
+ const doc=await store.read('ocrAccounts/'+id);
+ assert.equal(doc.data.balance,10);assert.equal(doc.data.active,false);
+ const history=await billing.history(id);
+ assert.equal(history.items.filter(x=>x.type==='delete').length,1);
+});
+test('deletion waits for in-flight OCR and cannot trigger a paid request after deletion',async()=>{
+ const {billing,id}=await setup();
+ await billing.reserve(id,rid,'fingerprint');
+ await assert.rejects(billing.remove({accountId:id,requestId:rid,confirmName:'測試客戶'}),e=>e.status===409);
+ await billing.finish(id,rid,'text',null);
+ await billing.remove({accountId:id,requestId:rid,confirmName:'測試客戶'});
+ let calls=0;
+ await assert.rejects(billing.recognize(code,{image:'x',requestId:rid},async()=>{calls++;return 'text';}),e=>e.status===401);
+ assert.equal(calls,0);
+});
+test('delete endpoint is admin-only',async()=>{
+ const {billing,id}=await setup(),admin='z'.repeat(32);
+ const server=createOcrServer({billing,adminCode:admin});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{
+  const url='http://127.0.0.1:'+server.address().port+'/api/admin/delete';
+  const body=JSON.stringify({accountId:id,requestId:rid,confirmName:'測試客戶'});
+  assert.equal((await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+code,'Content-Type':'application/json'},body})).status,401);
+  assert.equal((await billing.list()).items.length,1);
+  assert.equal((await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+admin,'Content-Type':'application/json'},body})).status,200);
+ }finally{await new Promise(r=>server.close(r));}
+});
+test('preflight distinguishes preview customer codes without OCR or debit',async()=>{
+ const {billing}=await setup(10);let calls=0;
+ const server=createOcrServer({billing,billingActive:false,project:'test',accessCode:'legacy-code-123456',annotate:async()=>{calls++;return 'text';}});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{
+  const check=secret=>fetch('http://127.0.0.1:'+server.address().port+'/api/ocr/check',{headers:{Authorization:'Bearer '+secret}});
+  const r=await check(code);assert.equal(r.status,409);assert.match((await r.json()).error,/尚未開放/);
+  assert.equal((await check('C0001')).status,401);
+  assert.equal((await check('legacy-code-123456')).status,200);
+  assert.equal(calls,0);assert.equal((await billing.account(code)).balance,10);
+ }finally{await new Promise(r=>server.close(r));}
+});

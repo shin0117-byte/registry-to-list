@@ -1,3 +1,12 @@
+async function validateOcrAccess() {
+  if (!document.querySelector('#cloudConsent').checked) throw new Error('請先勾選同意將文件頁面傳送至雲端辨識');
+  const code = document.querySelector('#cloudAccessCode').value.trim();
+  if (!code) throw new Error('請輸入管理員提供的使用碼');
+  const response = await fetch(cloudBaseUrl() + '/api/ocr/check', {headers:{Authorization:'Bearer '+code},signal:AbortSignal.timeout(15000)});
+  const body = await response.json().catch(()=>({}));
+  if (!response.ok) throw new Error(response.status===404?'服務尚未更新使用碼預先驗證功能，請聯絡管理員更新':body.error||'無法驗證使用碼，尚未讀取文件');
+  if (document.querySelector('#cloudAccessCode').value.trim()!==code) throw new Error('使用碼已變更，請重新開始');
+}
 function ocrRetrySeconds(response, body) {
   const header = response.headers?.get('Retry-After');
   let seconds = Number(body.retryAfterSeconds);

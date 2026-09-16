@@ -156,6 +156,7 @@ async function runOcr() {
   button.disabled = true; button.textContent = '讀取文件中…'; setProgress(0, '正在讀取 PDF 與分析頁面');
   try {
 
+    if (mode !== 'direct') { setProgress(0, '正在驗證使用碼'); await validateOcrAccess(); }
     const source = await collectSourceContent(state.files, mode, (current, total) => { setProgress((current / total) * 20, `正在分析第 ${current}/${total} 頁`); });
     setOcrEngine('PDF 文字讀取');
     let ocrText = ''; const addressTexts = []; let pageResults = [];

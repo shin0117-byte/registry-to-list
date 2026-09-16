@@ -47,6 +47,22 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
     const a=Buffer.from(bearer),b=Buffer.from(adminCode);
     if(a.length!==b.length||!timingSafeEqual(a,b))throw fail(401,'管理員密碼不正確');
    };
+   if(path==='/api/ocr/check' && req.method==='GET'){
+    if((billingActive?adminCode.length<32:accessCode.length<16)||!project)throw fail(503,'雲端 OCR 尚未設定完成');
+    if(billingActive){
+     const a=await billing.account(bearer);
+     if(!a.active)throw fail(403,'使用碼已停用');
+     if(a.balance<1)throw fail(402,'點數不足，請聯絡管理員加點');
+     return json(res,200,{valid:true,billingEnabled:true});
+    }
+    const supplied=Buffer.from(bearer),expected=Buffer.from(accessCode);
+    if(supplied.length===expected.length&&timingSafeEqual(supplied,expected))return json(res,200,{valid:true,billingEnabled:false});
+    if(billing&&/^ocr_[a-f0-9]{64}$/.test(bearer)){
+     await billing.lookup(bearer);
+     throw fail(409,'使用碼已確認，但客戶 OCR 模式尚未開放，請聯絡管理員；目前僅接受原共用碼');
+    }
+    throw fail(401,'使用碼不正確，請貼上完整 OCR 使用碼；客戶代號（例如 C0001）不是使用碼');
+   }
    if(path.startsWith('/api/admin/')){
     if(!billing)throw fail(503,'計費功能尚未啟用');
     adminAuth();
@@ -54,6 +70,7 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
     if(path==='/api/admin/history'&&req.method==='GET')return json(res,200,await billing.history(url.searchParams.get('id'),url.searchParams.get('cursor')||''));
     if(req.method!=='POST')throw fail(404,'找不到操作');
     const input=await readJson(req,16384);
+    if(path==='/api/admin/delete')return json(res,200,await billing.remove(input));
     if(path==='/api/admin/code')return json(res,200,await billing.reveal(input));
     if(path==='/api/admin/create')return json(res,200,await billing.create(input));
     if(path==='/api/admin/credit')return json(res,200,await billing.credit(input));

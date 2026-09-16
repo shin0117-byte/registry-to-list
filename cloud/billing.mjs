@@ -32,7 +32,7 @@ export class Billing {
  async saveKnownCode(id,code){
   return this.atomic(async()=>{
    const doc=await this.store.read(accountPath(id));
-   if(!doc.data)throw fail(401,'使用碼不正確');
+   if(!doc.data||doc.data.deletedAt)throw fail(401,'使用碼不正確或已刪除');
    if(!doc.data.sealedCode)await this.store.commit([{...doc,data:{...doc.data,sealedCode:this.seal(code,id)}}]);
   });
  }
@@ -41,6 +41,7 @@ export class Billing {
   return this.atomic(async()=>{
    const [a,e]=await Promise.all([this.store.read(path),this.store.read(entry)]);
    if(!a.data)throw fail(404,'找不到客戶');
+   if(a.data.deletedAt)throw fail(409,'客戶已刪除');
    if(!a.data.sealedCode)throw fail(409,'此舊使用碼只有雜湊，無法還原；客戶下次使用原碼時會自動補存');
    const code=this.unseal(a.data.sealedCode,accountId);
    if(!e.data)await this.store.commit([{...e,data:{type:'code_view',status:'viewed',points:0,createdAt:this.now()}}]);
@@ -50,7 +51,7 @@ export class Billing {
  async lookup(code){
   if(typeof code!=='string'||!/^ocr_[a-f0-9]{64}$/.test(code))throw fail(401,'使用碼不正確');
   const id=hash(code),doc=await this.store.read(accountPath(id));
-  if(!doc.data)throw fail(401,'使用碼不正確');
+  if(!doc.data||doc.data.deletedAt)throw fail(401,'使用碼不正確或已刪除');
   if(!doc.data.sealedCode&&/^[a-f0-9]{64}$/i.test(this.codeKey))await this.saveKnownCode(id,code);
   return {id,doc};
  }
@@ -60,6 +61,7 @@ export class Billing {
   const id=hash(code),path=accountPath(id),ref='ocrCustomerRefs/'+hash(customerRef.trim().toLowerCase());
   return this.atomic(async()=>{
    const [a,r]=await Promise.all([this.store.read(path),this.store.read(ref)]);
+   if(a.data?.deletedAt)throw fail(409,'客戶已刪除，原客戶代號不可重複領取試用');
    if(r.data){
     if(r.data.id===id&&a.data)return view(id,a.data);
     throw fail(409,'此客戶代號已建立使用碼；不可重複領取試用');
@@ -78,6 +80,7 @@ export class Billing {
   return this.atomic(async()=>{
    const [a,e,receipt]=await Promise.all([this.store.read(path),this.store.read(entry),this.store.read(receiptPath)]);
    if(!a.data)throw fail(404,'找不到客戶');
+   if(a.data.deletedAt)throw fail(409,'客戶已刪除');
    if(e.data||receipt.data){if((e.data||receipt.data).fingerprint!==fingerprint)throw fail(409,'操作編號或收款編號已用於其他加點');return {...view(accountId,a.data),alreadyApplied:true};}
    if(a.data.balance+plans[plan].points>100000000)throw fail(400,'餘額超過上限');
    const data={...a.data,balance:a.data.balance+plans[plan].points};
@@ -91,10 +94,26 @@ export class Billing {
   return this.atomic(async()=>{
    const [a,e]=await Promise.all([this.store.read(path),this.store.read(entry)]);
    if(!a.data)throw fail(404,'找不到客戶');
+   if(a.data.deletedAt)throw fail(409,'客戶已刪除');
    if(e.data){if(e.data.active!==active)throw fail(409,'操作編號已用於其他設定');return view(accountId,a.data);}
    const data={...a.data,active};
    await this.store.commit([{...a,data},{...e,data:{type:'status',status:active?'enabled':'disabled',active,points:0,createdAt:this.now()}}]);
    return view(accountId,data);
+  });
+ }
+ async remove({accountId,requestId,confirmName}){
+  const path=accountPath(accountId),entry=path+'/ledger/delete_'+operation(requestId);
+  await this.recover(accountId);
+  return this.atomic(async()=>{
+   const a=await this.store.read(path);
+   if(!a.data)throw fail(404,'找不到客戶');
+
+   if(confirmName!==a.data.name)throw fail(400,'客戶名稱確認不符');
+   if(a.data.deletedAt)return {deleted:true};
+   if(a.data.pending)throw fail(409,'客戶仍有辨識作業處理中，請稍後再刪除');
+   const e=await this.store.read(entry);
+   await this.store.commit([{...a,data:{...a.data,active:false,deletedAt:this.now()}},{...e,data:{type:'delete',status:'deleted',points:0,createdAt:this.now()}}]);
+   return {deleted:true};
   });
  }
  async recover(id){
@@ -111,7 +130,7 @@ export class Billing {
   });
  }
  async account(code){const {id}=await this.lookup(code);return view(id,(await this.recover(id)).data);}
- async list(cursor=''){const p=await this.store.list('ocrAccounts',cursor);return {...p,items:p.items.map(d=>view(d.path.split('/').at(-1),d.data))};}
+ async list(cursor=''){const p=await this.store.list('ocrAccounts',cursor);return {...p,items:p.items.filter(d=>!d.data.deletedAt).map(d=>view(d.path.split('/').at(-1),d.data))};}
  async history(id,cursor=''){
   const p=await this.store.list(accountPath(id)+'/ledger',cursor);
   return {...p,items:p.items.map(({data:d})=>({type:d.type,status:d.status,points:d.points,twd:d.twd||0,note:d.note||'',createdAt:d.createdAt,finishedAt:d.finishedAt||null}))};
