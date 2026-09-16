@@ -21,10 +21,10 @@ test('hybrid mode gets PDF text but sends exactly one full-page image even with 
  assert.equal(new Set(r.images.map(x=>x.pageKey)).size,4);
  assert.ok(r.pages.every(x=>x.directText===text.trim()));
 });
-test('matching owner fills missing image address and share; conflicts preserve text and flag alternative',()=>{
+test('matching owner fills missing image address and share; conflicts prefer OCR and retain text in notes',()=>{
  const c=setup();
  const result=c.reconcileOwners([base],[{...base,name:'休＊＊',address:'新北市三芝區測試路1號',numerator:'1',denominator:'3',shareAvailable:true}]);
- assert.equal(result.length,1);assert.equal(result[0].name,'林＊＊');
+ assert.equal(result.length,1);assert.equal(result[0].name,'休＊＊');
  assert.equal(result[0].address,'新北市三芝區測試路1號');
  assert.equal(result[0].denominator,'3');
  assert.ok(result[0].review.some(x=>x.includes('姓名不一致')));
@@ -77,4 +77,56 @@ test('OCR response retains page identifiers for reconciliation and neutralizes p
  assert.equal(r.pageResults[0].text,'test result');
  c.fetch=async()=>({ok:false,status:502,json:async()=>({error:'Google OCR 請求失敗'})});
  await assert.rejects(c.runGoogleOcr(jobs,()=>{}),error=>error.message==='辨識服務 請求失敗');
+});
+test('land heading and labeled designation fields follow transcript example',()=>{
+ const c=setup();
+ const r=c.extractLandFields('土地登記第二類謄本（地號全部） 恆春鎮頂水泉段 0691-0000地號 列印時間：民國111年07月14日 土地標示部 登記日期：民國107年11月09日 面積：****2,511.18平方公尺 使用分區：國家公園區 使用地類別：（空白） 民國111年01月 公告土地現值：****8,200元／平方公尺 土地所有權部 住址：臺北市中山區測試路');
+ assert.equal(r.district,'恆春鎮');assert.equal(r.section,'頂水泉段');assert.equal(r.parcel,'0691-0000');
+ assert.equal(r.area,'2511.18');assert.equal(r.value,'8200');assert.equal(r.valuePeriod,'民國111年01月');
+ assert.equal(r.zoning,'國家公園區');assert.equal(r.landCategory,'（空白）');
+});
+test('land fields do not borrow dates or classifications from owners',()=>{
+ const c=setup();
+ const r=c.extractLandFields('新北市三芝區土地公埔段埔尾小段0155-0000地號 土地標示部 民國110年02月01日 面積：5092平方公尺 使用分區：山坡地保育區 使用地類別：農牧用地 公告土地現值：4000 土地所有權部 民國111年01月公告土地現值：8000');
+ assert.equal(r.district,'新北市三芝區');assert.equal(r.section,'土地公埔段埔尾小段');
+ assert.equal(r.valuePeriod,'');assert.equal(r.value,'4000');assert.equal(r.landCategory,'農牧用地');
+});
+test('county comes from jurisdiction authority, never issuer or owner address',()=>{
+ const c=setup();
+ const text='恆春鎮頂水泉段0691-0000地號 資 料 管 轄 機 關：屏 東 縣恆春地政事務所 謄本核發機關：臺北市某地政事務所 土地標示部 土地所有權部 住址：高雄市左營區';
+ assert.equal(c.extractLandFields(text).district,'屏東縣恆春鎮');
+ assert.equal(c.extractLandFields(text.replace('資料','資料')).section,'頂水泉段');
+ assert.equal(c.extractLandFields('竹北市測試段0001-0000地號 資料管轄機關：新竹縣竹北地政事務所 土地標示部').district,'新竹縣竹北市');
+ assert.equal(c.extractLandFields('屏東縣恆春鎮頂水泉段0691-0000地號 資料管轄機關：屏東縣恆春地政事務所 土地標示部').district,'屏東縣恆春鎮');
+ assert.equal(c.extractLandFields('恆春鎮頂水泉段0691-0000地號 謄本核發機關：臺北市某地政事務所 土地標示部 土地所有權部 住址：高雄市').district,'恆春鎮');
+});
+test('OCR conflicts replace owner fields and retain both values for review',()=>{
+ const c=setup(),direct={...base,shareAvailable:true,numerator:'1',denominator:'2',common:true,address:'舊路1號',date:'民國110.01.01',reason:'買賣'};
+ const scan={...direct,name:'李＊＊',address:'新路2號',numerator:'3',denominator:'4',common:false,date:'民國111.01.01',reason:'繼承'};
+ const result=c.reconcileOwners([direct],[scan])[0];
+ for(const key of ['name','address','date','reason','numerator','denominator','common'])assert.equal(result[key],scan[key]);
+ assert.ok(result.review.some(x=>x.includes('文字：舊路1號；採用OCR：新路2號')));
+ assert.ok(result.review.some(x=>x.includes('文字：1／2；採用OCR：3／4')));
+ const missing=c.reconcileOwners([direct],[{...scan,address:'',shareAvailable:false}])[0];
+ assert.equal(missing.address,direct.address);assert.equal(missing.denominator,'2');
+});
+test('land conflicts prefer OCR and preserve original in supplemental notes',()=>{
+ const c=setup();
+ const r=c.reconcileLandFields('恆春鎮頂水泉段0691-0000地號 土地標示部 公告土地現值：8000 使用分區：一般農業區','恆春鎮頂水泉段0691-0000地號 土地標示部 公告土地現值：8200 使用分區：國家公園區');
+ assert.equal(r.fields.value,'8200');assert.equal(r.fields.zoning,'國家公園區');
+ assert.ok(r.review.some(x=>x.includes('文字：8000；採用OCR：8200')));
+});
+test('red watermark fading preserves black, gray, blue and dark overlapping strokes',()=>{
+ const c=setup();
+ const pixels=new Uint8ClampedArray([255,70,70,255, 0,0,0,255, 120,120,120,255, 30,30,240,255, 90,15,15,255, 255,240,240,255]);
+ assert.equal(c.fadeRedWatermarkPixels(pixels),1);
+ assert.deepEqual(Array.from(pixels),[255,255,255,255,0,0,0,255,120,120,120,255,30,30,240,255,90,15,15,255,255,240,240,255]);
+});
+test('watermark decode failures safely retain original image and do not call OCR',async()=>{
+ const c=setup({createImageBitmap:async()=>{throw new Error('unsupported');}});
+ const blob={size:100};
+ assert.equal(await c.fadeRedWatermarkBlob(blob),blob);
+ const jobs=[{blob,pageKey:'one'},{blob,pageKey:'two'}];
+ await c.prepareWatermarkImages(jobs,()=>{});
+ assert.equal(jobs.length,2);assert.equal(jobs[0].blob,blob);assert.equal(jobs[1].pageKey,'two');
 });

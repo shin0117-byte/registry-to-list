@@ -26,7 +26,7 @@
           <label class="dropzone" for="sourceFile"><input id="sourceFile" type="file" accept="application/pdf,image/*" multiple hidden><span class="upload-icon">↥</span><strong>加入謄本 PDF 或掃描圖片</strong><small>PDF、JPG、PNG、TIFF</small></label>
           <input id="readMode" type="hidden" value="auto">
           <label class="mode-label">OCR 使用碼<input id="cloudAccessCode" type="password" autocomplete="off" placeholder="請輸入使用碼"></label>
-<label class="hint" style="display:flex;gap:8px;margin-top:12px"><input id="cloudConsent" type="checkbox" style="width:auto">我同意將文件頁面傳送至雲端辨識。</label>
+<label class="hint" style="display:flex;gap:8px;margin-top:12px"><input id="fadeWatermark" type="checkbox" checked style="width:auto">辨識前淡化紅色浮水印（原檔不變；紅色文字或印章也可能變淡，可取消）</label><label class="hint" style="display:flex;gap:8px;margin-top:12px"><input id="cloudConsent" type="checkbox" style="width:auto">我同意將文件頁面傳送至雲端辨識。</label>
 <div id="creditPanel" hidden><p id="creditBalance" class="hint" role="status">請查詢使用碼餘額</p><button id="refreshCredit" class="text-btn" type="button">查詢點數</button> <button id="showCreditHistory" class="text-btn" type="button">使用紀錄</button><pre id="creditHistory" style="white-space:pre-wrap;max-height:180px;overflow:auto;font-size:11px"></pre><button id="moreCreditHistory" type="button" hidden>更多紀錄</button><button id="resetCreditBatch" class="text-btn" type="button">清除待續接任務</button><p class="hint">每頁成功辨識扣 1 點；修改及匯出不扣點。辨識文字暫存 24 小時供重試，過期後停止提供並排程刪除；不保留原始圖片。點數不自動到期。</p></div>
 <div id="fileList" class="file-list"></div>
           <button id="ocrBtn" class="wide secondary" disabled>讀取並自動帶入</button>
@@ -58,7 +58,7 @@
 
       <section class="workspace">
         <section class="panel metadata"><div class="section-heading"><div><p class="eyebrow">清冊基本資料</p><h2>土地資料</h2></div><button id="loadDemoBtn" class="text-btn">載入範例格式</button></div>
-          <div class="form-grid"><label>縣市／行政區<input id="district" placeholder="例：桃園市龍潭區"></label><label>段別<input id="section" placeholder="例：北坑段"></label><label>地號<input id="parcel" placeholder="例：0798-0000"></label><label>總面積（m²）<input id="area" type="number" min="0" step="0.01"></label><label>公告現值（元/m²）<input id="value" type="number" min="0" step="1"></label><label>使用分區／類別<input id="zoning" placeholder="例：山坡地保育區　農牧用地"></label><label class="full">建號／補充資訊<input id="building" placeholder="例：建號、謄本日期或其他說明"></label></div>
+          <div class="form-grid"><label>縣市／行政區<input id="district" placeholder="例：桃園市龍潭區"></label><label>段別<input id="section" placeholder="例：北坑段"></label><label>地號<input id="parcel" placeholder="例：0798-0000"></label><label>總面積（m²）<input id="area" type="number" min="0" step="0.01"></label><label>公告現值（元/m²）<input id="value" type="number" min="0" step="1"></label><label>公告現值年期<input id="valuePeriod" placeholder="例：民國111年01月"></label><label>使用分區<input id="zoning" placeholder="例：國家公園區"></label><label>使用地類別<input id="landCategory" placeholder="例：農牧用地或（空白）"></label><label class="full">建號／補充資訊<input id="building" placeholder="例：建號、謄本日期或其他說明"></label></div>
         </section>
 
         <section class="panel register"><div class="section-heading"><div><p class="eyebrow">OWNER REGISTER</p><h2>權利人清冊</h2></div><div class="table-actions"><button id="addRowBtn" class="secondary">＋ 新增一筆</button><button id="exportBtn" class="ghost">匯出 Excel</button></div></div>

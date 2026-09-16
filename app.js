@@ -117,7 +117,7 @@ function buildExportRows(items, area) {
       '<td>' + escapeXml(row.date) + '</td><td>' + escapeXml(row.reason) + '</td><td>' + escapeXml(row.note) + '</td></tr>';
   }).join('');
 }
-function saveDraft() { localStorage.setItem('registry-draft', JSON.stringify({fields:Object.fromEntries(['district','section','parcel','area','value','zoning','building'].map(k=>[k,$('#'+k).value])), rows:getData()})); toast('草稿已儲存於本機瀏覽器'); }
+function saveDraft() { localStorage.setItem('registry-draft', JSON.stringify({fields:Object.fromEntries(['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'].map(k=>[k,$('#'+k).value])), rows:getData()})); toast('草稿已儲存於本機瀏覽器'); }
 function restoreDraft() { try { const d=JSON.parse(localStorage.getItem('registry-draft')); if (!d) return; Object.entries(d.fields).forEach(([k,v])=>$('#'+k).value=v); d.rows.forEach(r=>addRow([r.name,r.id || '',r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r)); } catch {} }
 function escapeXml(value='') { return String(value).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 function exportExcel() {
@@ -125,14 +125,14 @@ function exportExcel() {
   const items = getData(); const area=Number($('#area').value)||0;
   const head = ['次序','姓名','地址','持分','持分坪數','原因發生日期','登記原因','備註'];
   const body = buildExportRows(items, area);
-  const html=`<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:'Microsoft JhengHei'}td,th{border:1px solid #555;padding:6px;vertical-align:top;white-space:normal;overflow-wrap:anywhere}.export-share{vertical-align:middle;text-align:center}.export-name{display:block;width:7em}.export-address{display:block;width:15em}th{background:#dcebe7}.title{font-size:16pt;font-weight:bold;text-align:left}</style></head><body><table><tr><th class="title" colspan="8">${escapeXml(title)}　總面積：${area.toLocaleString()}m²　約 ${(area*.3025).toFixed(2)}坪　公告現值：${$('#value').value}/m²</th></tr><tr><td colspan="8">${escapeXml($('#zoning').value)}　建號：${escapeXml($('#building').value)}</td></tr><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr>${body}<tr><td colspan="4">合計</td><td>${(area*.3025).toFixed(2)}</td><td colspan="3"></td></tr></table></body></html>`;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse;font-family:'Microsoft JhengHei'}td,th{border:1px solid #555;padding:6px;vertical-align:top;white-space:normal;overflow-wrap:anywhere}.export-share{vertical-align:middle;text-align:center}.export-name{display:block;width:7em}.export-address{display:block;width:15em}th{background:#dcebe7}.title{font-size:16pt;font-weight:bold;text-align:left}</style></head><body><table><tr><th class="title" colspan="8">${escapeXml(title)}　總面積：${area.toLocaleString()}m²　約 ${(area*.3025).toFixed(2)}坪　${escapeXml(landValueLabel())}${$('#value').value}/m²</th></tr><tr><td colspan="8">${escapeXml($('#zoning').value)}　建號：${escapeXml($('#building').value)}</td></tr><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr>${body}<tr><td colspan="4">合計</td><td>${(area*.3025).toFixed(2)}</td><td colspan="3"></td></tr></table></body></html>`;
   const blob=new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${title}.xls`; a.click(); URL.revokeObjectURL(a.href); toast('已匯出 Excel 相容清冊');
 }
 function exportPdf() {
   const title = `${$('#district').value}${$('#section').value}${$('#parcel').value}地號清冊`;
   const area = Number($('#area').value) || 0; const items = getData();
   const rowsHtml = buildExportRows(items, area);
-  const documentHtml = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escapeXml(title)}</title><style>@page{size:A3 landscape;margin:12mm}body{font-family:'Microsoft JhengHei',sans-serif;color:#17212b;font-size:12pt;line-height:1.4;margin:0}h1{font-size:16pt;margin:0 0 5px}.meta{margin:0 0 12px;line-height:1.65;color:#334854}table{width:100%;table-layout:fixed;border-collapse:collapse}thead{display:table-header-group}th,td{border:1px solid #9baeb5;padding:6px 7px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:normal}th{background:#e4efed}tr{break-inside:avoid}.export-share{text-align:center;vertical-align:middle;overflow-wrap:anywhere}.export-name{display:block;width:100%;overflow-wrap:anywhere}.export-address{display:block;width:100%;overflow-wrap:anywhere}.footer{margin-top:8px;font-size:12pt;color:#455b66}</style></head><body><h1>${escapeXml(title)}</h1><p class="meta">總面積：${area.toLocaleString('zh-TW',{maximumFractionDigits:2})} m²　約 ${(area * .3025).toLocaleString('zh-TW',{maximumFractionDigits:2})} 坪　公告現值：${escapeXml($('#value').value || '—')} 元／m²<br>${escapeXml($('#zoning').value)}　${escapeXml($('#building').value)}</p><table><colgroup><col style="width:4%"><col style="width:9%"><col style="width:25%"><col style="width:15%"><col style="width:8%"><col style="width:12%"><col style="width:9%"><col style="width:18%"></colgroup><thead><tr><th>次序</th><th>姓名</th><th>地址</th><th>持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th></tr></thead><tbody>${rowsHtml}</tbody></table><p class="footer">本清冊由謄本轉清冊系統於本機產生。</p><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
+  const documentHtml = `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><title>${escapeXml(title)}</title><style>@page{size:A3 landscape;margin:12mm}body{font-family:'Microsoft JhengHei',sans-serif;color:#17212b;font-size:12pt;line-height:1.4;margin:0}h1{font-size:16pt;margin:0 0 5px}.meta{margin:0 0 12px;line-height:1.65;color:#334854}table{width:100%;table-layout:fixed;border-collapse:collapse}thead{display:table-header-group}th,td{border:1px solid #9baeb5;padding:6px 7px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:normal}th{background:#e4efed}tr{break-inside:avoid}.export-share{text-align:center;vertical-align:middle;overflow-wrap:anywhere}.export-name{display:block;width:100%;overflow-wrap:anywhere}.export-address{display:block;width:100%;overflow-wrap:anywhere}.footer{margin-top:8px;font-size:12pt;color:#455b66}</style></head><body><h1>${escapeXml(title)}</h1><p class="meta">總面積：${area.toLocaleString('zh-TW',{maximumFractionDigits:2})} m²　約 ${(area * .3025).toLocaleString('zh-TW',{maximumFractionDigits:2})} 坪　${escapeXml(landValueLabel())}${escapeXml($('#value').value || '—')} 元／m²<br>${escapeXml($('#zoning').value)}　${escapeXml($('#building').value)}</p><table><colgroup><col style="width:4%"><col style="width:9%"><col style="width:25%"><col style="width:15%"><col style="width:8%"><col style="width:12%"><col style="width:9%"><col style="width:18%"></colgroup><thead><tr><th>次序</th><th>姓名</th><th>地址</th><th>持分</th><th>持分坪數</th><th>原因發生日期</th><th>登記原因</th><th>備註</th></tr></thead><tbody>${rowsHtml}</tbody></table><p class="footer">本清冊由謄本轉清冊系統於本機產生。</p><script>window.onload=()=>setTimeout(()=>window.print(),250)<\/script></body></html>`;
   const output = window.open('', '_blank'); if (!output) return toast('瀏覽器阻擋了 PDF 視窗，請允許彈出視窗後再試。');
   output.document.write(documentHtml); output.document.close();
 }
@@ -162,11 +162,12 @@ async function runOcr() {
     let ocrText = ''; const addressTexts = []; let pageResults = [];
     if (source.images.length) {
       setOcrEngine('Google Cloud Vision');
+      if ($('#fadeWatermark').checked) await prepareWatermarkImages(source.images, setProgress);
       const result = await runGoogleOcr(source.images, setProgress);
       ocrText = result.ocrText; addressTexts.push(...result.addressTexts); pageResults = result.pageResults || [];
     }
     const ownerText = chooseExtractionText(mode, source.directText, ocrText);
-    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, mode === 'auto' ? reconcileDocumentPages(source.pages, pageResults) : null); setProgress(100, '完成'); window.prepaid?.finish();
+    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, mode === 'auto' ? reconcileDocumentPages(source.pages, pageResults) : null, mode === 'auto' ? reconcileLandFields(source.directText, ocrText) : null); setProgress(100, '完成'); window.prepaid?.finish();
   } catch (error) { setProgress(0, '未完成：' + error.message); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
@@ -209,6 +210,39 @@ async function collectSourceContent(files, mode, progress, loadPdf = () => impor
   }
   return {images,directText,pages};
 }
+function fadeRedWatermarkPixels(data) {
+  let changed = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r=data[i],g=data[i+1],b=data[i+2];
+    // Retain dark/neutral strokes. Red-channel dropout lightens only clearly red pixels.
+    if (data[i+3] && r >= 150 && r-g >= 30 && r-b >= 30 && r >= g*1.2 && r >= b*1.2) {
+      data[i+1]=r;data[i+2]=r;changed++;
+    }
+  }
+  return changed;
+}
+async function fadeRedWatermarkBlob(blob) {
+  let bitmap,canvas;
+  try {
+    bitmap=await createImageBitmap(blob);
+    if (bitmap.width*bitmap.height>40000000) return blob;
+    canvas=document.createElement('canvas');canvas.width=bitmap.width;canvas.height=bitmap.height;
+    const ctx=canvas.getContext('2d',{willReadFrequently:true});
+    ctx.drawImage(bitmap,0,0);
+    const pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
+    if (!fadeRedWatermarkPixels(pixels.data)) return blob;
+    ctx.putImageData(pixels,0,0);
+    const cleaned=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
+    return cleaned && cleaned.size<=7*1024*1024 ? cleaned : blob;
+  } catch { return blob; }
+  finally { bitmap?.close();if(canvas){canvas.width=0;canvas.height=0;} }
+}
+async function prepareWatermarkImages(images,progress) {
+  for (let i=0;i<images.length;i++) {
+    progress(20,'正在淡化紅色浮水印 '+(i+1)+'／'+images.length);
+    images[i].blob=await fadeRedWatermarkBlob(images[i].blob);
+  }
+}
 function parsedOwners(text) {
   const section = isolateOwnershipSection(text);
   return extractOwners(section,section.replace(/\s+/g,' ').trim());
@@ -230,6 +264,18 @@ function reconcileDocumentPages(pages = [], results = []) {
     })));
   }
   return owners;
+}
+function reconcileLandFields(directText, ocrText) {
+  const fields = extractLandFields(directText), scanned = extractLandFields(ocrText), review = [];
+  const labels = {district:'縣市／行政區',section:'段別',parcel:'地號',area:'面積',value:'公告現值',valuePeriod:'公告現值年期',zoning:'使用分區',landCategory:'使用地類別'};
+  const normalize = v => String(v || '').replace(/\s/g,'').replace(/台/g,'臺');
+  for (const [key,label] of Object.entries(labels)) {
+    if (!scanned[key] || /[�□]/.test(scanned[key])) continue;
+    if (fields[key] && normalize(fields[key]) !== normalize(scanned[key]))
+      review.push(label + '不一致；文字：' + fields[key] + '；採用OCR：' + scanned[key]);
+    fields[key] = scanned[key];
+  }
+  return {fields,review};
 }
 function reconcileOwners(directOwners, ocrOwners) {
   const merged = directOwners.map(owner => ({...owner,review:[]}));
@@ -253,15 +299,15 @@ function reconcileOwners(directOwners, ocrOwners) {
     for (const [field,label] of Object.entries(labels)) {
       if (!usable(owner[field]) && usable(scanned[field])) owner[field] = scanned[field];
       else if (usable(owner[field]) && usable(scanned[field]) && normalize(owner[field]) !== normalize(scanned[field]))
-        owner.review.push(label + '不一致；影像：' + scanned[field]);
+        { owner.review.push(label + '不一致；文字：' + owner[field] + '；採用OCR：' + scanned[field]); owner[field] = scanned[field]; }
     }
     if (owner.shareAvailable === false && scanned.shareAvailable !== false) {
       owner.numerator = scanned.numerator; owner.denominator = scanned.denominator; owner.shareAvailable = true;
     } else if (scanned.shareAvailable !== false &&
       (String(owner.numerator) !== String(scanned.numerator) || String(owner.denominator) !== String(scanned.denominator)))
-      owner.review.push('持分不一致；影像：' + scanned.numerator + '／' + scanned.denominator);
-    if (owner.common !== scanned.common) owner.review.push('公同共有標示不一致');
-    owner.common = owner.common || scanned.common;
+      { owner.review.push('持分不一致；文字：' + owner.numerator + '／' + owner.denominator + '；採用OCR：' + scanned.numerator + '／' + scanned.denominator); owner.numerator = scanned.numerator; owner.denominator = scanned.denominator; }
+    if (owner.common !== scanned.common) owner.review.push('公同共有標示不一致；文字：' + (owner.common ? '是' : '否') + '；採用OCR：' + (scanned.common ? '是' : '否'));
+    owner.common = scanned.common;
   }
   return merged.map(owner => owner.shareAvailable === false ? {...owner,numerator:'',denominator:'',review:[...owner.review,'持分未辨識，請校對']} : owner);
 }
@@ -292,12 +338,13 @@ function rebuildPdfLines(items) {
   }
   return lines.sort((a, b) => b.y - a.y).map(line => line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ')).join('\n');
 }
-async function applyExtractedData(landText, ownerText, addressTexts = [], reconciledOwners = null) {
+async function applyExtractedData(landText, ownerText, addressTexts = [], reconciledOwners = null, reconciledLand = null) {
   [...rows.children].filter(tr => tr.dataset.ocrImported === 'true' || /自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
   const cleanLand = landText.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
-  const fields = extractLandFields(cleanLand); let filled = 0;
+  const fields = reconciledLand ? reconciledLand.fields : extractLandFields(cleanLand); let filled = 0;
+  if (reconciledLand?.review.length) { const notes = $('#building'); notes.value = [notes.value, ...reconciledLand.review].filter(Boolean).join('；'); }
   const mappedDistrict = await lookupDistrict(fields.section);
-  if (mappedDistrict) fields.district = mappedDistrict;
+  if (mappedDistrict && (!fields.district || mappedDistrict.endsWith(fields.district))) fields.district = mappedDistrict;
   for (const [id, value] of Object.entries(fields)) if (value && (!$('#' + id).value.trim() || (id === 'district' && mappedDistrict))) { $('#' + id).value = value; filled += 1; }
   const ownershipSection = isolateOwnershipSection(ownerText);
   const cleanOwners = ownershipSection.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -323,15 +370,32 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
   toast(`讀取完成：土地資料帶入 ${filled} 項，新增權利人 ${newOwners.length} 筆。`);
 }
 function extractLandFields(text) {
-  const district = text.match(/(?:臺|台|桃園|新北|臺北|台北|臺中|台中|高雄|臺南|台南)[\u4e00-\u9fff]{0,4}(?:市|縣)[\u4e00-\u9fff]{1,5}(?:區|鄉|鎮|市)/)?.[0];
-  const rawSection = text.match(/[\u4e00-\u9fff0-9０-９]{1,16}段(?=\s*(?:\d{1,4}[-－]\d{4}|地號))/)?.[0] || '';
-  const section = rawSection.replace(/^.*(?:縣|市|區|鄉|鎮)/, '');
-  const parcelMatch = text.match(/(\d{1,4})\s*[-－]\s*(\d{4})\s*地號|地號\s*[：:]?\s*(\d{1,4})\s*[-－]?\s*(\d{4})?/);
-  const parcel = parcelMatch ? `${(parcelMatch[1] || parcelMatch[3]).padStart(4, '0')}-${(parcelMatch[2] || parcelMatch[4] || '0000').padStart(4, '0')}` : '';
-  const area = text.match(/(?:總\s*)?面\s*積\s*[：:]?[^\d]{0,18}([\d,]+(?:\.\d+)?)\s*(?:平方公尺|㎡|m2|m²)/i)?.[1]?.replace(/,/g, '');
-  const value = text.match(/公告\s*(?:土地\s*)?現\s*值\s*[：:]?[^\d]{0,18}([\d,]+(?:\.\d+)?)/)?.[1]?.replace(/,/g, '');
-  const zoning = text.match(/(山坡地保育區|一般農業區|特定農業區|都市計畫區|森林區)\s*(農牧用地|林業用地|建築用地|交通用地|水利用地)?/)?.[0];
-  return { district, section, parcel, area, value, zoning };
+  const compact = text.replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248)).replace(/\s+/g,'');
+  const header = compact.split(/土地標示部/)[0];
+  const title = header.match(/(?:^|謄本(?:[（(]地號全部[）)])?)((?:[\u4e00-\u9fff]{2,3}[縣市])?[\u4e00-\u9fff]{2,5}?(?:區|鄉|鎮|市))([\u4e00-\u9fff0-9]{1,18}段)(\d{1,4})[-－](\d{4})地號/);
+  const heading = title || header.match(/((?:[\u4e00-\u9fff]{2,3}[縣市])?[\u4e00-\u9fff]{2,5}?(?:區|鄉|鎮|市))([\u4e00-\u9fff0-9]{1,18}段)(\d{1,4})[-－](\d{4})地號/);
+  const authorityCounty = header.match(/資料管轄機關[：:]?((?:臺|台)北市|新北市|桃園市|(?:臺|台)中市|(?:臺|台)南市|高雄市|基隆市|新竹[縣市]|嘉義[縣市]|宜蘭縣|苗栗縣|彰化縣|南投縣|雲林縣|屏東縣|花蓮縣|(?:臺|台)東縣|澎湖縣|金門縣|連江縣)/)?.[1];
+  const headingDistrict = heading?.[1] || '';
+  const hasCounty = /^(?:[\u4e00-\u9fff]{2,3}[縣市])[\u4e00-\u9fff]+(?:區|鄉|鎮|市)$/.test(headingDistrict);
+  const district = headingDistrict && authorityCounty && !hasCounty ? authorityCounty + headingDistrict : headingDistrict || authorityCounty;
+  const section = heading?.[2] || header.match(/([\u4e00-\u9fff0-9]{1,16}段)(?=\d{1,4}[-－]\d{4}地號)/)?.[1];
+  const parcelMatch = compact.match(/(\d{1,4})[-－](\d{4})地號|地號[：:]?(\d{1,4})[-－]?(\d{4})?/);
+  const parcel = parcelMatch ? (parcelMatch[1] || parcelMatch[3]).padStart(4,'0')+'-'+(parcelMatch[2] || parcelMatch[4] || '0000').padStart(4,'0') : '';
+  const land = (compact.split('土地標示部')[1] || compact).split(/土地所有權部|土地他項權利部/)[0];
+  const area = land.match(/(?:總)?面積[：:]?[^\d]{0,18}([\d,]+(?:\.\d+)?)(?:平方公尺|㎡|m2|m²)/i)?.[1]?.replace(/,/g,'');
+  const value = land.match(/公告(?:土地)?現值[：:]?[^\d]{0,18}([\d,]+(?:\.\d+)?)/)?.[1]?.replace(/,/g,'');
+  const period = land.match(/(?:民國)?(\d{2,3})年(\d{1,2})月[^\d\u4e00-\u9fff]{0,8}公告(?:土地)?現值/);
+  const valuePeriod = period ? '民國'+period[1]+'年'+period[2].padStart(2,'0')+'月' : '';
+  const zoning = land.match(/使用分區[：:]?([（(]空白[）)]|[\u4e00-\u9fff]{1,12}?區)/)?.[1] ||
+    land.match(/山坡地保育區|一般農業區|特定農業區|都市計畫區|森林區/)?.[0];
+  const landCategory = land.match(/使用地類別[：:]?([（(]空白[）)]|[\u4e00-\u9fff]{1,12}?用地)/)?.[1];
+  return {district,section,parcel,area,value,valuePeriod,zoning,landCategory};
+}
+function landClassificationLabel() {
+  return [$('#zoning').value, $('#landCategory').value ? '使用地類別：'+$('#landCategory').value : ''].filter(Boolean).join('　');
+}
+function landValueLabel() {
+  return ($('#valuePeriod').value ? $('#valuePeriod').value+'　' : '')+'公告現值：';
 }
 async function lookupDistrict(section) {
   if (!section) return '';
