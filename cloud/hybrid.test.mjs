@@ -143,3 +143,33 @@ test('invalid ID is not recorded, trailing name digits removed, reason prefers t
  assert.equal(c.genderFromId('A123****891'),'—');
  assert.equal(c.reconcileOwners([{...direct,reason:''}],[scan])[0].reason,'繼承');
 });
+test('nonblank other registration notes retain parentheses and remain owner scoped',()=>{
+ const c=setup();
+ assert.equal(c.registrationNotes('其他登記事項：（空白）').length,0);
+ assert.equal(c.registrationNotes('其他登記事項：( 空 白 )').length,0);
+ const text=record('0010','林＊＊','甲路')+'\n其他登記事項：（限制事項）另有說明\n'+record('0020','王＊＊','乙路')+'\n其他登記事項：（空白）';
+ const owners=c.parsedOwners(text);
+ assert.ok(owners[0].review.includes('有其他登記事項：（限制事項）另有說明'));
+ assert.equal(owners[1].review.length,0);
+ const merged=c.reconcileOwners(owners,[{...owners[0],review:[]}]);
+ assert.ok(merged[0].review.some(x=>x.includes('限制事項')));
+});
+test('land registration notes go to supplemental notes and ignore owner notes',()=>{
+ const c=setup();
+ const text='土地標示部 其他登記事項：（重測前：水泉段0430-0000地號） 土地所有權部 其他登記事項：（另一事項）';
+ const r=c.reconcileLandFields(text,'土地標示部 其他登記事項：（空白）');
+ assert.ok(r.review.includes('有其他登記事項：（重測前：水泉段0430-0000地號）'));
+ assert.ok(!r.review.some(x=>x.includes('另一事項')));
+});
+test('other-rights heading warns from either source once, including spaced headings',()=>{
+ const c=setup();
+ const heading='土 地 他 項\n權 利 部';
+ assert.equal(c.otherRightsNotes(heading).length,1);
+ assert.equal(c.otherRightsNotes('土地所有權部').length,0);
+ assert.equal(c.otherRightsNotes('').length,0);
+ for(const [direct,ocr] of [[heading,''],['',heading],[heading,heading]]){
+  const r=c.reconcileLandFields(direct,ocr);
+  assert.equal(r.review.filter(x=>x.includes('土地他項權利部')).length,1);
+ }
+ assert.equal(c.otherRightsNotes('土地他項權利部（空白）').length,1);
+});

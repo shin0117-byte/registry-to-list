@@ -266,6 +266,25 @@ function reconcileDocumentPages(pages = [], results = []) {
   }
   return owners;
 }
+function otherRightsNotes(text) {
+  return /土\s*地\s*他\s*項\s*權\s*利\s*部/.test(String(text || '')) ? ['謄本出現「土地他項權利部」，請查閱原謄本內容'] : [];
+}
+function registrationNotes(text, landOnly=false) {
+  let source=String(text || '').replace(/\r/g,'');
+  if(landOnly) {
+    const marker=/土\s*地\s*標\s*示\s*部/.exec(source);
+    if(!marker)return [];
+    source=source.slice(marker.index+marker[0].length).split(/土\s*地\s*(?:所\s*有\s*權|他\s*項\s*權\s*利)\s*部/)[0];
+  }
+  const notes=[];
+  const pattern=/其\s*他\s*登\s*記\s*事\s*項\s*[：:]\s*([\s\S]*?)(?=其\s*他\s*登\s*記\s*事\s*項|土\s*地\s*(?:所\s*有\s*權|他\s*項\s*權\s*利|標\s*示)\s*部|[（(]\s*\d{4}\s*[）)]\s*登\s*記\s*次\s*序|登\s*記\s*次\s*序|$)/g;
+  for(const match of source.matchAll(pattern)){
+    const value=match[1].replace(/[＊*]{3,}/g,'').replace(/[（(]\s*續次頁\s*[）)]/g,'').replace(/\s+/g,' ').trim();
+    if(!value || /^[（(]\s*空\s*白\s*[）)]$/.test(value))continue;
+    notes.push('有其他登記事項：'+value);
+  }
+  return [...new Set(notes)];
+}
 function reconcileLandFields(directText, ocrText) {
   const fields = extractLandFields(directText), scanned = extractLandFields(ocrText), review = [];
   const labels = {district:'縣市／行政區',section:'段別',parcel:'地號',area:'面積',value:'公告現值',valuePeriod:'公告現值年期',zoning:'使用分區',landCategory:'使用地類別'};
@@ -276,6 +295,7 @@ function reconcileLandFields(directText, ocrText) {
       review.push(label + '不一致；文字：' + fields[key] + '；採用OCR：' + scanned[key]);
     fields[key] = scanned[key];
   }
+  review.push(...new Set([...registrationNotes(directText,true),...registrationNotes(ocrText,true),...otherRightsNotes(directText),...otherRightsNotes(ocrText)]));
   return {fields,review};
 }
 function validateOwnerIdentity(owner) {
@@ -352,6 +372,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
   [...rows.children].filter(tr => tr.dataset.ocrImported === 'true' || /自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
   const cleanLand = landText.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
   const fields = reconciledLand ? reconciledLand.fields : extractLandFields(cleanLand); let filled = 0;
+  if (!reconciledLand) reconciledLand = {review:[...registrationNotes(landText,true),...otherRightsNotes(landText)]};
   if (reconciledLand?.review.length) { const notes = $('#building'); notes.value = [notes.value, ...reconciledLand.review].filter(Boolean).join('；'); }
   const mappedDistrict = await lookupDistrict(fields.section);
   if (mappedDistrict && (!fields.district || mappedDistrict.endsWith(fields.district))) fields.district = mappedDistrict;
@@ -527,7 +548,7 @@ function extractLabelledOwners(text) {
     const numerator = chineseShare?.[2] || slashShare?.[1] || 1;
     const denominator = chineseShare?.[1] || slashShare?.[2] || 1;
     const registrationSequence = block.match(/登\s*記\s*次\s*序\s*[：:]?\s*(\d{4}(?:-\d{3})?)/)?.[1] || '';
-    return { sequence, registrationSequence, shareAvailable:Boolean(chineseShare || slashShare), name, id, address, numerator, denominator, date, reason, common: /公\s*同\s*共\s*有/.test(shareText) };
+    return { review:registrationNotes(block), sequence, registrationSequence, shareAvailable:Boolean(chineseShare || slashShare), name, id, address, numerator, denominator, date, reason, common: /公\s*同\s*共\s*有/.test(shareText) };
   }).filter(record => record.name || record.id || record.address);
   return records.filter(record => record.name && record.name.length <= 80 && record.name !== '姓名');
 }
