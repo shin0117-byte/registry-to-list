@@ -7,12 +7,12 @@
 <label>客戶名稱<input id="customerName" required maxlength="80"></label>
 <label><input id="grantTrial" type="checkbox" checked style="width:auto">贈送一次性 10 頁體驗</label>
 <button class="secondary">建立使用碼</button></form>
-<label>本次產生的使用碼<textarea id="newCode" readonly rows="3"></textarea></label><p class="hint">請複製保存後交給客戶。後台只儲存使用碼雜湊，不會再次顯示完整使用碼；若回應中斷，請勿刷新，直接重按建立可重試原操作。</p></section>
+<label>本次產生的使用碼<textarea id="newCode" readonly rows="3"></textarea></label><p class="hint">使用碼加密保存在客戶清單，管理員可顯示或複製後私下交給客戶；若回應中斷，請勿刷新，直接重按建立可重試原操作。</p></section>
 <section class="panel" style="padding:20px;margin-bottom:20px"><h2>已收款加點</h2><form id="creditCustomer">
 <label>客戶<select id="creditAccount" required></select></label>
 <label>方案<select id="creditPlan"><option value="light">NT$199／100 頁</option><option value="standard" selected>NT$499／500 頁</option><option value="bulk">NT$999／1,500 頁</option></select></label>
 <label>收款或訂單編號<input id="paymentNote" required maxlength="200" placeholder="例如：轉帳訂單 20260916-001"></label>
 <button class="primary">確認已收款並加點</button></form><p class="hint">網路中斷時保留相同資料重試，不會重複加點。同一客戶的相同收款編號不會重複加點；不同款項請使用不同編號。</p></section>
-<section class="panel" style="padding:20px"><h2>客戶清單</h2><div style="overflow:auto"><table style="min-width:700px"><thead><tr><th>客戶</th><th>可用點數</th><th>已用頁數</th><th>狀態</th><th>操作</th></tr></thead><tbody id="accounts"></tbody></table></div><button id="moreAccounts" hidden>下一批客戶</button>
+<section class="panel" style="padding:20px"><h2>客戶清單</h2><p class="hint">使用碼預設遮蔽，顯示後 60 秒隱藏。舊碼若尚未補存，須由客戶使用原碼一次才可補存；已遺失的舊碼無法由雜湊還原。</p><div style="overflow:auto"><table style="min-width:1000px"><thead><tr><th>客戶</th><th>可用點數</th><th>已用頁數</th><th>狀態</th><th>使用碼</th><th>操作</th></tr></thead><tbody id="accounts"></tbody></table></div><button id="moreAccounts" hidden>下一批客戶</button>
 <h3>使用與加點紀錄</h3><pre id="history" style="white-space:pre-wrap"></pre><button id="moreHistory" hidden>更多紀錄</button></section>
 </main><script src="cloud-config.js"></script><script src="admin.js"></script></body></html>

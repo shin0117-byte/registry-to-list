@@ -21,7 +21,7 @@ bash cloud/prepare-billing.sh
 - 畫面不顯示客戶點數面板，直到正式切換。
 
 管理網址：https://registry-ocr-tynlgrdn2a-de.a.run.app/admin.html（或 GitHub Pages 下的 admin.html）。
-同一個真實客戶請固定使用唯一代號，避免管理員以不同代號重複送試用。完整客戶使用碼只在建立當次顯示；後端只保存雜湊。必須先保管好再交付客戶。此版提供停用／重新啟用，尚無遺失使用碼的輪替功能。
+同一個真實客戶請固定使用唯一代號，避免管理員以不同代號重複送試用。新客戶使用碼以 AES-256-GCM 加密保存在客戶帳戶，管理員可在清單顯示或複製，查閱會留下紀錄。驗證仍使用雜湊。舊版雜湊無法還原；客戶下次輸入正確原碼時自動補存。此版提供停用／重新啟用，尚無遺失使用碼的輪替功能。
 
 ## 正式切換前檢查（需另行確認）
 
@@ -56,3 +56,15 @@ node --test cloud/*.test.mjs
 ~~~
 
 參考：[Firestore 原子提交](https://firebase.google.com/docs/firestore/reference/rest/v1/projects.databases.documents/commit)、[版本前置條件](https://firebase.google.com/docs/firestore/reference/rest/v1/Precondition)、[TTL 刪除延遲](https://docs.cloud.google.com/firestore/native/docs/ttl)、[Cloud Run Secret Manager](https://docs.cloud.google.com/run/docs/configuring/services/secrets)。
+## 使用碼加密保存更新
+
+若先前的 prepare-billing.sh 還在執行，請先完成，不要在密碼提示中貼入指令。已準備後台者，在 Cloud Shell 專案目錄更新程式後執行：
+
+~~~bash
+bash cloud/setup-code-storage.sh
+bash cloud/update-service.sh
+~~~
+
+新準備流程已包含金鑰設定。金鑰由程式隨機生成，獨立存於 Secret Manager 的 registry-ocr-code-key 第 1 版，永不自動覆蓋，不需提供給客戶或貼進聊天。管理員密碼變更不影響解密。設定金鑰不切換收費模式，Secret Manager 可能產生費用。
+
+請保留原金鑰及資料庫備份；金鑰遺失將無法還原已保存的使用碼。未設定金鑰時禁止建立新客戶，既有使用碼驗證仍可使用。一般客戶查詢及清單回應不包含完整碼或密文；只有管理員專用查閱 API 提供完整碼。舊碼若已遺失且從未補存，無法還原，此版尚未提供輪替功能。

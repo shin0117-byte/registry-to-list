@@ -1,17 +1,57 @@
-import {createHash} from 'node:crypto';
+import {createHash,createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
 export const plans=Object.freeze({light:{points:100,twd:199},standard:{points:500,twd:499},bulk:{points:1500,twd:999}});
 export const fail=(status,message)=>Object.assign(new Error(message),{status});
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const operation=s=>{if(typeof s!=='string'||!/^[a-zA-Z0-9_-]{16,100}$/.test(s))throw fail(400,'操作編號無效');return s;};
 const accountPath=id=>{if(!/^[a-f0-9]{64}$/.test(id||''))throw fail(400,'客戶編號無效');return 'ocrAccounts/'+id;};
-const view=(id,a)=>({id,name:a.name,balance:a.balance,used:a.used,active:a.active,createdAt:a.createdAt,pending:!!a.pending});
+const view=(id,a)=>({id,name:a.name,balance:a.balance,used:a.used,active:a.active,createdAt:a.createdAt,pending:!!a.pending,codeSaved:!!a.sealedCode});
 export class Billing {
- constructor(store,{now=()=>Date.now(),lease=180000}={}){this.store=store;this.now=now;this.lease=lease;}
+ constructor(store,{now=()=>Date.now(),lease=180000,codeKey=process.env.OCR_CODE_KEY||''}={}){this.store=store;this.now=now;this.lease=lease;this.codeKey=codeKey;}
  async atomic(fn){for(let n=0;n<10;n++){try{return await fn();}catch(e){if(!e.conflict)throw e;}}throw fail(503,'點數更新忙碌，請使用原操作重試');}
+ key(){
+  if(!/^[a-f0-9]{64}$/i.test(this.codeKey))throw fail(503,'使用碼加密保存尚未設定，請先設定獨立加密金鑰');
+  return Buffer.from(this.codeKey,'hex');
+ }
+ seal(code,id){
+  const key=this.key(),iv=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,iv);
+  cipher.setAAD(Buffer.from(id));
+  const data=Buffer.concat([cipher.update(code,'utf8'),cipher.final()]);
+  return {v:1,keyId:hash(key).slice(0,16),iv:iv.toString('base64'),tag:cipher.getAuthTag().toString('base64'),data:data.toString('base64')};
+ }
+ unseal(envelope,id){
+  const key=this.key();
+  try{
+   if(envelope.v!==1||envelope.keyId!==hash(key).slice(0,16))throw new Error();
+   const decipher=createDecipheriv('aes-256-gcm',key,Buffer.from(envelope.iv,'base64'));
+   decipher.setAAD(Buffer.from(id));decipher.setAuthTag(Buffer.from(envelope.tag,'base64'));
+   const code=Buffer.concat([decipher.update(Buffer.from(envelope.data,'base64')),decipher.final()]).toString('utf8');
+   if(!/^ocr_[a-f0-9]{64}$/.test(code)||hash(code)!==id)throw new Error();
+   return code;
+  }catch{throw fail(503,'使用碼解密失敗，請檢查原加密金鑰；不要覆蓋既有資料');}
+ }
+ async saveKnownCode(id,code){
+  return this.atomic(async()=>{
+   const doc=await this.store.read(accountPath(id));
+   if(!doc.data)throw fail(401,'使用碼不正確');
+   if(!doc.data.sealedCode)await this.store.commit([{...doc,data:{...doc.data,sealedCode:this.seal(code,id)}}]);
+  });
+ }
+ async reveal({accountId,requestId}){
+  const path=accountPath(accountId),entry=path+'/ledger/code_view_'+operation(requestId);
+  return this.atomic(async()=>{
+   const [a,e]=await Promise.all([this.store.read(path),this.store.read(entry)]);
+   if(!a.data)throw fail(404,'找不到客戶');
+   if(!a.data.sealedCode)throw fail(409,'此舊使用碼只有雜湊，無法還原；客戶下次使用原碼時會自動補存');
+   const code=this.unseal(a.data.sealedCode,accountId);
+   if(!e.data)await this.store.commit([{...e,data:{type:'code_view',status:'viewed',points:0,createdAt:this.now()}}]);
+   return {code};
+  });
+ }
  async lookup(code){
   if(typeof code!=='string'||!/^ocr_[a-f0-9]{64}$/.test(code))throw fail(401,'使用碼不正確');
   const id=hash(code),doc=await this.store.read(accountPath(id));
   if(!doc.data)throw fail(401,'使用碼不正確');
+  if(!doc.data.sealedCode&&/^[a-f0-9]{64}$/i.test(this.codeKey))await this.saveKnownCode(id,code);
   return {id,doc};
  }
  async create({customerRef,name,code,trial=true}){
@@ -25,7 +65,7 @@ export class Billing {
     throw fail(409,'此客戶代號已建立使用碼；不可重複領取試用');
    }
    if(a.data)throw fail(409,'使用碼已存在');
-   const data={name:name.trim(),balance:trial?10:0,used:0,active:true,pending:null,createdAt:this.now()};
+   const data={name:name.trim(),balance:trial?10:0,used:0,active:true,pending:null,createdAt:this.now(),sealedCode:this.seal(code,id)};
    await this.store.commit([{...a,data},{...r,data:{id,createdAt:this.now()}},
     {path:path+'/ledger/welcome',version:null,data:{type:'trial',status:'credited',points:data.balance,twd:0,createdAt:this.now()}}]);
    return view(id,data);

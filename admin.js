@@ -10,6 +10,7 @@ async function api(path,body){
  if(!secret)throw new Error('請輸入管理員密碼');
  const r=await fetch(base.replace(/\/$/,'')+path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+secret,...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(20000)});
  const data=await r.json().catch(()=>({}));
+ if(adminEl('adminCode').value.trim()!==secret)throw new Error('登入資料已變更，請重新操作');
  if(!r.ok)throw new Error(data.error||'操作未確認，請保留原資料後重試');
  return data;
 }
@@ -23,6 +24,15 @@ async function load(reset=true){
   const option=document.createElement('option');option.value=a.id;option.textContent=a.name+'（'+a.balance+' 點）';select.append(option);
   const tr=document.createElement('tr');
   for(const text of [a.name,a.balance,a.used,a.active?(a.pending?'處理中':'啟用'):'停用']){const td=document.createElement('td');td.textContent=text;tr.append(td);}
+  const codeCell=document.createElement('td'),field=document.createElement('input'),show=document.createElement('button'),copy=document.createElement('button');
+  field.readOnly=true;field.type='text';field.placeholder=a.codeSaved?'••••••••（已加密保存）':'舊碼尚未補存';field.setAttribute('aria-label',a.name+'的使用碼');
+  show.textContent='顯示';copy.textContent='複製';show.disabled=copy.disabled=!a.codeSaved;
+  let hideTimer;
+  const hide=()=>{field.value='';show.textContent='顯示';clearTimeout(hideTimer);};
+  const fetchCode=async()=>{const result=await api('/api/admin/code',{accountId:a.id,requestId:crypto.randomUUID()});return result.code;};
+  show.onclick=()=>guarded(show,async()=>{if(field.value){hide();return;}field.value=await fetchCode();show.textContent='隱藏';hideTimer=setTimeout(hide,60000);});
+  copy.onclick=()=>guarded(copy,async()=>{const code=await fetchCode();try{await navigator.clipboard.writeText(code);message('已複製「'+a.name+'」的使用碼，請私下交付客戶');}catch{field.value=code;show.textContent='隱藏';field.select();hideTimer=setTimeout(hide,60000);message('請複製已選取的使用碼');}});
+  codeCell.className='customer-code';codeCell.append(field,show,copy);tr.append(codeCell);
   const td=document.createElement('td'),toggle=document.createElement('button'),history=document.createElement('button');
   toggle.textContent=a.active?'停用':'啟用';history.textContent='紀錄';
   const requestId=crypto.randomUUID();
@@ -39,8 +49,8 @@ async function load(reset=true){
 async function loadHistory(id,reset){
  const data=await api('/api/admin/history?id='+encodeURIComponent(id)+(reset?'':'&cursor='+encodeURIComponent(historyCursor)));
  historyAccount=id;historyCursor=data.nextCursor;
- const labels={trial:'試用',credit:'加點',ocr:'OCR',status:'狀態'};
- const statuses={credited:'已加點',completed:'已扣點',pending:'保留點數中',refunded:'已退點',enabled:'啟用',disabled:'停用'};
+ const labels={trial:'試用',credit:'加點',ocr:'OCR',status:'狀態',code_view:'查看使用碼'};
+ const statuses={credited:'已加點',completed:'已扣點',pending:'保留點數中',refunded:'已退點',enabled:'啟用',disabled:'停用',viewed:'已查看'};
  const text=data.items.map(x=>new Date(x.createdAt).toLocaleString()+'　'+(labels[x.type]||x.type)+'　'+(statuses[x.status]||x.status)+'　'+x.points+' 點'+(x.twd?'　NT$'+x.twd:'')+(x.note?'　'+x.note:'')).join('\n');
  adminEl('history').textContent=reset?text:adminEl('history').textContent+'\n'+text;
  adminEl('moreHistory').hidden=!historyCursor;
@@ -56,7 +66,7 @@ adminEl('createCustomer').onsubmit=event=>{
   const key=JSON.stringify(fields);
   if(createDraft?.key!==key)createDraft={key,input:{...fields,code:randomCode()}};
   adminEl('newCode').value=createDraft.input.code;
-  await api('/api/admin/create',createDraft.input);message('客戶已建立，請保存本次使用碼');await load();
+  await api('/api/admin/create',createDraft.input);message('客戶已建立，使用碼已加密保存於客戶清單');await load();
  });
 };
 adminEl('creditCustomer').onsubmit=event=>{

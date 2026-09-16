@@ -16,7 +16,7 @@ const code='ocr_'+'a'.repeat(64),otherCode='ocr_'+'b'.repeat(64);
 const rid='request-id-00000001';
 async function setup(balance=1){
  const store=new MemoryStore();let now=1000000;
- const billing=new Billing(store,{now:()=>now,lease:1000});
+ const billing=new Billing(store,{now:()=>now,lease:1000,codeKey:'1'.repeat(64)});
  const account=await billing.create({customerRef:'C1',name:'測試客戶',code});
  const p='ocrAccounts/'+account.id,s=await store.read(p);await store.commit([{...s,data:{...s.data,balance}}]);
  return {billing,store,id:account.id,tick:ms=>now+=ms};
@@ -146,4 +146,42 @@ test('same payment reference with another request ID does not credit twice',asyn
  const result=await billing.credit({accountId:id,plan:'light',requestId:'payment-request-002',note:'訂單001'});
  assert.equal(result.alreadyApplied,true);
  assert.equal((await billing.account(code)).balance,100);
+});
+test('encrypted codes survive restart, audit access and reject wrong keys',async()=>{
+ const {billing,store,id}=await setup();
+ const second=new Billing(store,{codeKey:'1'.repeat(64)});
+ assert.equal((await second.reveal({accountId:id,requestId:rid})).code,code);
+ await second.reveal({accountId:id,requestId:rid});
+ const entries=await store.list('ocrAccounts/'+id+'/ledger');
+ assert.equal(entries.items.filter(x=>x.data.type==='code_view').length,1);
+ assert.ok(!JSON.stringify([...store.docs]).includes(code));
+ assert.ok(!JSON.stringify(await billing.list()).includes('sealedCode'));
+ const wrong=new Billing(store,{codeKey:'2'.repeat(64)});
+ await assert.rejects(wrong.reveal({accountId:id,requestId:rid}),e=>e.status===503);
+ assert.equal((await wrong.account(code)).balance,1);
+});
+test('legacy codes backfill only on valid authentication, missing key fails new creation',async()=>{
+ const {billing,store,id}=await setup();
+ const doc=await store.read('ocrAccounts/'+id);delete doc.data.sealedCode;await store.commit([doc]);
+ await assert.rejects(billing.reveal({accountId:id,requestId:rid}),e=>e.status===409);
+ const noKey=new Billing(store,{codeKey:''});
+ assert.equal((await noKey.account(code)).balance,1);
+ assert.equal((await store.read(doc.path)).data.sealedCode,undefined);
+ await billing.account(code);
+ assert.equal((await billing.reveal({accountId:id,requestId:rid})).code,code);
+ await assert.rejects(noKey.create({customerRef:'C2',name:'new',code:otherCode}),e=>e.status===503);
+});
+test('code reveal endpoint requires admin authentication and prevents caching',async()=>{
+ const {billing,id}=await setup();
+ const admin='z'.repeat(32),server=createOcrServer({billing,adminCode:admin,accessCode:'x'.repeat(16)});
+ await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ try{
+  const url='http://127.0.0.1:'+server.address().port+'/api/admin/code';
+  for(const secret of ['',code]){
+   const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+secret,'Content-Type':'application/json'},body:JSON.stringify({accountId:id,requestId:rid})});
+   assert.equal(r.status,401);
+  }
+  const r=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+admin,'Content-Type':'application/json'},body:JSON.stringify({accountId:id,requestId:rid})});
+  assert.equal(r.status,200);assert.match(r.headers.get('cache-control'),/no-store/);assert.equal((await r.json()).code,code);
+ }finally{await new Promise(r=>server.close(r));}
 });

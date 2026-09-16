@@ -30,6 +30,7 @@ fi
 VERSION=$(printf %s "$ADMIN_SECRET" | gcloud secrets versions add "$SECRET" --data-file=- --project="$PROJECT" --format='value(name)' | awk -F/ '{print $NF}')
 unset ADMIN_SECRET
 gcloud secrets add-iam-policy-binding "$SECRET" --member="serviceAccount:$ACCOUNT" --role=roles/secretmanager.secretAccessor --project="$PROJECT" >/dev/null
+bash cloud/setup-code-storage.sh
 bash cloud/update-service.sh
 gcloud run services update "$SERVICE" --project="$PROJECT" --region="$REGION" \
  --update-env-vars="BILLING_ENABLED=true,BILLING_ADMIN_ONLY=true,BILLING_DATABASE=$DATABASE" \

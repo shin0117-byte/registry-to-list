@@ -54,6 +54,7 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
     if(path==='/api/admin/history'&&req.method==='GET')return json(res,200,await billing.history(url.searchParams.get('id'),url.searchParams.get('cursor')||''));
     if(req.method!=='POST')throw fail(404,'找不到操作');
     const input=await readJson(req,16384);
+    if(path==='/api/admin/code')return json(res,200,await billing.reveal(input));
     if(path==='/api/admin/create')return json(res,200,await billing.create(input));
     if(path==='/api/admin/credit')return json(res,200,await billing.credit(input));
     if(path==='/api/admin/status')return json(res,200,await billing.status(input));
