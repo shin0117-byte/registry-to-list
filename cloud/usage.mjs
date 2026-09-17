@@ -4,8 +4,9 @@ export function estimateVisionCost(units,free=true) {
  return Math.max(0,Math.min(count,5000000)-(free?1000:0))*0.0015+Math.max(0,count-5000000)*0.0006;
 }
 export async function readGoogleUsage(project,{fetcher=fetch,now=new Date()}={}) {
- const start=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),1));
- const today=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate()));
+ const local=new Date(now.getTime()+8*3600000);
+ const start=new Date(Date.UTC(local.getUTCFullYear(),local.getUTCMonth(),1)-8*3600000);
+ const today=new Date(Date.UTC(local.getUTCFullYear(),local.getUTCMonth(),local.getUTCDate())-8*3600000);
  const auth=await fetcher('http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token',{headers:{'Metadata-Flavor':'Google'},signal:AbortSignal.timeout(5000)});
  if(!auth.ok) throw failure(503,'無法讀取 Google 服務帳戶');
  const token=await auth.json();
@@ -46,7 +47,7 @@ export async function readGoogleUsage(project,{fetcher=fetch,now=new Date()}={})
   if(pageToken && seen.has(pageToken)) throw failure(503,'Google 監控分頁異常');
   seen.add(pageToken);
  } while(pageToken);
- return {source:'google-cloud-monitoring',project,month:start.toISOString().slice(0,7),timezone:'UTC',
+ return {source:'google-cloud-monitoring',project,month:local.toISOString().slice(0,7),day:local.toISOString().slice(0,10),timezone:'Asia/Taipei',
   updatedAt:now.toISOString(),latestPoint:latest,hasData:seriesCount>0,
   requests,success,errors,todayRequests,imageRequests,otherRequests,
   estimateUsd:estimateVisionCost(imageRequests),estimateWithoutFreeUsd:estimateVisionCost(imageRequests,false),

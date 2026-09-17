@@ -90,7 +90,7 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
     if((!billing&&accessCode.length<16) || !project) throw fail(503,'雲端監控尚未設定完成');
     const supplied=Buffer.from(req.headers.authorization || ''),expected=Buffer.from('Bearer '+accessCode);
     if(!billing && (supplied.length!==expected.length || !timingSafeEqual(supplied,expected))) throw fail(401,'使用碼不正確，請向管理員確認');
-    if(!usageCache || Date.now()-usageCache.at>=300000 || usageCache.body.month!==new Date().toISOString().slice(0,7)){
+    if(!usageCache || Date.now()-usageCache.at>=300000 || usageCache.body.day!==new Date(Date.now()+8*3600000).toISOString().slice(0,10)){
      if(!usageFlight) usageFlight=usageReader(project).then(body=>{usageCache={body,at:Date.now()};}).finally(()=>{usageFlight=null;});
      await usageFlight;
     }

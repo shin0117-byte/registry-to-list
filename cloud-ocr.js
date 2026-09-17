@@ -97,7 +97,7 @@ async function refreshGoogleUsage() {
     if (!response.ok || body.source !== 'google-cloud-monitoring') throw new Error(body.error || '無法讀取 Google 監控資料。');
     for (const id of ['usageToday','usageMonthCount','usageResponses','usageImages','usageCost']) document.querySelector('#' + id).textContent = '—';
     document.querySelector('#usageWithoutFree').textContent = '';
-    document.querySelector('#usageUpdated').textContent = body.month + '（UTC）・查詢時間：' + new Date(body.updatedAt).toLocaleString('zh-TW');
+    document.querySelector('#usageUpdated').textContent = body.month + '（台灣時間）・查詢時間：' + new Date(body.updatedAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'});
     if (!body.hasData) {
       status.textContent = 'Google 尚無此月份的可用監控資料；可能尚未呼叫或資料仍在延遲，不能視為 0 張。';
     } else {

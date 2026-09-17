@@ -64,8 +64,20 @@ async function loadHistory(id,reset){
  adminEl('history').textContent=reset?text:adminEl('history').textContent+'\n'+text;
  adminEl('moreHistory').hidden=!historyCursor;
 }
-adminEl('login').onclick=()=>guarded(adminEl('login'),async()=>{await load();message('已讀取客戶；管理員密碼只保留於本頁記憶體');});
-adminEl('logout').onclick=()=>{adminEl('adminCode').value='';adminEl('newCode').value='';adminEl('accounts').replaceChildren();adminEl('creditAccount').replaceChildren();adminEl('history').textContent='';accounts=[];createDraft=creditDraft=null;message('已清除本頁登入資料');};
+adminEl('adminLoginForm').onsubmit=event=>{
+ event.preventDefault();
+ return guarded(adminEl('login'),async()=>{
+  const secret=adminEl('adminCode').value.trim();
+  await load();
+  message('登入成功。可使用瀏覽器密碼管理員儲存及自動填入密碼。');
+  if(secret===adminEl('adminCode').value.trim() && typeof PasswordCredential!=='undefined' && navigator.credentials?.store){
+   try { await navigator.credentials.store(new PasswordCredential({id:'admin',password:secret,name:'謄本轉清冊管理員'})); }
+   catch { /* Browser preferences may decline saving; login still succeeds. */ }
+  }
+  if(secret===adminEl('adminCode').value.trim())await loadAdminUsage();
+ });
+};
+adminEl('logout').onclick=()=>{clearAdminUsage();adminEl('adminCode').value='';adminEl('newCode').value='';adminEl('accounts').replaceChildren();adminEl('creditAccount').replaceChildren();adminEl('history').textContent='';accounts=[];createDraft=creditDraft=null;message('已清除本頁登入資料');};
 adminEl('moreAccounts').onclick=()=>guarded(adminEl('moreAccounts'),()=>load(false));
 adminEl('moreHistory').onclick=()=>guarded(adminEl('moreHistory'),()=>loadHistory(historyAccount,false));
 adminEl('createCustomer').onsubmit=event=>{
@@ -86,3 +98,33 @@ adminEl('creditCustomer').onsubmit=event=>{
   const result=await api('/api/admin/credit',creditDraft.input);creditDraft=null;adminEl('paymentNote').value='';message(result.alreadyApplied?'此收款已記錄，沒有重複加點':'已加點完成');await load();
  });
 };
+let usageRevision=0;
+function clearAdminUsage(){
+ usageRevision++;adminEl('adminUsageData').textContent='';adminEl('adminUsageStatus').textContent='登入後顯示使用量。';
+}
+async function loadAdminUsage(){
+ const revision=++usageRevision,secret=adminEl('adminCode').value.trim();
+ adminEl('adminUsageData').textContent='';adminEl('adminUsageStatus').textContent='正在讀取使用量…';
+ try{
+  const data=await api('/api/usage');
+  if(revision!==usageRevision||secret!==adminEl('adminCode').value.trim())return;
+  if(!data.hasData){adminEl('adminUsageStatus').textContent='尚無監控資料或資料尚未送達，不能視為零用量。';return;}
+  const count=key=>{if(typeof data[key]!=='number'||!Number.isFinite(data[key])||data[key]<0)throw new Error('監控數據不完整，請稍後更新');return data[key].toLocaleString('zh-TW');};
+  const date=value=>value && Number.isFinite(Date.parse(value))?new Date(value).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}):'未提供';
+  adminEl('adminUsageData').textContent=[
+   '本日呼叫：'+count('todayRequests')+' 次',
+   '本月呼叫：'+count('requests')+' 次',
+   '本月成功／失敗：'+count('success')+'／'+count('errors')+' 次',
+   '本月成功圖片辨識呼叫：'+count('imageRequests')+' 次',
+   '統計月份：'+data.month+'（台灣時間）',
+   '資料查詢時間：'+date(data.updatedAt),
+   '最新監控資料時間：'+date(data.latestPoint)
+  ].join('\n');
+  adminEl('adminUsageStatus').textContent='已讀取雲端 OCR 用量';
+ }catch(e){
+  if(revision!==usageRevision||secret!==adminEl('adminCode').value.trim())return;
+  adminEl('adminUsageData').textContent='';adminEl('adminUsageStatus').textContent='使用量讀取失敗：'+e.message;
+ }
+}
+adminEl('refreshAdminUsage').onclick=()=>guarded(adminEl('refreshAdminUsage'),loadAdminUsage);
+adminEl('adminCode').addEventListener('input',clearAdminUsage);

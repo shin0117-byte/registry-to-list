@@ -20,11 +20,11 @@ test('reads Google pages across all instances; counts HTTP failures separately; 
  assert.equal(data.errors,3);
  assert.equal(data.imageRequests,1210);
  assert.equal(data.otherRequests,5);
- assert.equal(data.todayRequests,18);
+ assert.equal(data.todayRequests,1218);
  assert.equal(data.estimateUsd,0.315);
  assert.equal(urls.length,3);
  const query=new URL(urls[1]);
- assert.equal(query.searchParams.get('interval.startTime'),'2026-09-01T00:00:00.000Z');
+ assert.equal(query.searchParams.get('interval.startTime'),'2026-08-31T16:00:00.000Z');
  assert.match(query.searchParams.get('filter'),/vision.googleapis.com/);
  assert.equal(query.searchParams.get('aggregation.perSeriesAligner'),'ALIGN_SUM');
 });
@@ -45,7 +45,7 @@ test('price boundaries match published unit pricing',()=>{
 test('usage requires access code and deduplicates concurrent monitoring requests',async()=>{
  let calls=0;
  const server=createOcrServer({accessCode:'test-code-12345678',project:'test',usageReader:async()=>{
-  calls++;await new Promise(r=>setTimeout(r,20));return {month:new Date().toISOString().slice(0,7),source:'google-cloud-monitoring'};
+  calls++;await new Promise(r=>setTimeout(r,20));return {month:new Date(Date.now()+8*3600000).toISOString().slice(0,7),day:new Date(Date.now()+8*3600000).toISOString().slice(0,10),source:'google-cloud-monitoring'};
  }});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const url='http://127.0.0.1:'+server.address().port+'/api/usage';
@@ -59,4 +59,16 @@ test('usage requires access code and deduplicates concurrent monitoring requests
   await fetch(url,{headers});
   assert.equal(calls,1);
  }finally{await new Promise(r=>server.close(r));}
+});
+
+test('Taiwan month boundary starts at local midnight, not UTC midnight',async()=>{
+ let query;
+ const data=await readGoogleUsage('test',{now:new Date('2026-12-31T16:05:00Z'),fetcher:async url=>{
+  if(String(url).includes('metadata.google'))return {ok:true,json:async()=>({access_token:'test'})};
+  query=new URL(url);
+  return {ok:true,json:async()=>({timeSeries:[series('BatchAnnotateImages','2xx',[point(2,'2026-12-31T16:03:00Z')])]})};
+ }});
+ assert.equal(query.searchParams.get('interval.startTime'),'2026-12-31T16:00:00.000Z');
+ assert.equal(data.month,'2027-01');assert.equal(data.day,'2027-01-01');
+ assert.equal(data.timezone,'Asia/Taipei');assert.equal(data.todayRequests,2);
 });
