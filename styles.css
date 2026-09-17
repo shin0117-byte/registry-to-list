@@ -55,3 +55,4 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
 .admin-page th,.admin-page td{padding:10px;text-align:left;overflow-wrap:anywhere}
 .admin-page pre{max-height:360px;overflow:auto}
 .admin-page .customer-code{min-width:260px}.admin-page .customer-code input{width:250px;font-family:monospace}.admin-page .customer-code button{margin:4px 6px 0 0}
+.row-movement{display:flex;flex-direction:column;gap:3px;align-items:center}.row-movement button{padding:3px 1px;min-width:26px;font-size:11px;line-height:1.3}.row-movement button:disabled{opacity:.3;cursor:default}@media print{.row-movement{display:none!important}}

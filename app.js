@@ -30,7 +30,35 @@ function addRow(data = [], metadata = {}) {
   tr.addEventListener('input', updateRow);
 
   tr.querySelector('.delete-row').addEventListener('click', () => { tr.remove(); updateAll(); });
+  setupRowMovement(tr);
   rows.append(tr); tr.querySelectorAll('textarea').forEach(autoGrowField); updateAll();
+}
+function moveOwnerRow(tr,position) {
+  const list=[...rows.children],from=list.indexOf(tr),target=Number(position)-1;
+  if(from<0 || !Number.isInteger(target) || target<0 || target>=list.length || target===from)return false;
+  const others=list.filter(row=>row!==tr);
+  rows.insertBefore(tr,others[target] || null);
+  updateAll();
+  tr.scrollIntoView?.({block:'nearest'});
+  return true;
+}
+function setupRowMovement(tr) {
+  const controls=document.createElement('div');controls.className='row-movement';
+  for(const [label,cls,action] of [
+    ['↑','move-up',()=>moveOwnerRow(tr,[...rows.children].indexOf(tr))],
+    ['↓','move-down',()=>moveOwnerRow(tr,[...rows.children].indexOf(tr)+2)],
+    ['移至','move-to',()=>{
+      const value=prompt('移到第幾筆？請輸入 1～'+rows.children.length,[...rows.children].indexOf(tr)+1);
+      if(value===null)return;
+      if(!/^\d+$/.test(value.trim())||Number(value)<1||Number(value)>rows.children.length){toast('請輸入有效次序');return;}
+      moveOwnerRow(tr,Number(value));
+    }]
+  ]){
+    const button=document.createElement('button');button.type='button';button.textContent=label;button.className=cls;
+    button.setAttribute('aria-label',cls==='move-up'?'此筆上移':cls==='move-down'?'此筆下移':'移到指定次序');
+    button.addEventListener('click',action);controls.append(button);
+  }
+  tr.querySelector('.delete-row').parentElement.prepend(controls);
 }
 function genderFromId(id) {
   const normalized = id.trim().toUpperCase();
@@ -62,6 +90,8 @@ function updateAll() {
   const area = Number($('#area').value) || 0;
   [...rows.children].forEach((tr, index) => {
     tr.querySelector('.serial').textContent = index + 1;
+    const up=tr.querySelector('.move-up'),down=tr.querySelector('.move-down');
+    if(up)up.disabled=index===0;if(down)down.disabled=index===rows.children.length-1;
     const numerator = Number(tr.querySelector('[data-key="numerator"]').value) || 0;
     const denominator = Number(tr.querySelector('[data-key="denominator"]').value) || 1;
     tr.querySelector('.share-area').textContent = (area * numerator / denominator * 0.3025).toFixed(2);

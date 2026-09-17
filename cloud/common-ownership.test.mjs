@@ -87,3 +87,21 @@ test('draft restoration retains common group metadata',()=>{
  assert.equal(restored[1].metadata.commonGroup,'group-a');
  assert.equal(restored[1].values[2],'乙的完整住址');
 });
+test('moving inserted owners preserves data, renumbers and recomputes shared cells',()=>{
+ const {context:c,rows}=setup();
+ rows.children=[owner('甲',{commonGroup:'g'}),owner('乙',{commonGroup:'g'}),owner('補入')].map(mockRow);
+ rows.insertBefore=(row,before)=>{rows.children.splice(rows.children.indexOf(row),1);const i=before?rows.children.indexOf(before):rows.children.length;rows.children.splice(i,0,row);};
+ const added=rows.children[2],original=JSON.stringify(c.getData()[2]);
+ assert.equal(c.moveOwnerRow(added,2),true);
+ assert.deepEqual(Array.from(c.getData(),r=>r.name),['甲','補入','乙']);
+ assert.equal(JSON.stringify(c.getData()[1]),original);
+ assert.deepEqual(rows.children.map(r=>r.querySelector('.serial').textContent),[1,2,3]);
+ assert.equal(rows.children[0].children[4].rowSpan,1);
+ assert.equal(c.moveOwnerRow(added,3),true);
+ assert.equal(rows.children[0].children[4].rowSpan,2);
+ assert.equal(c.moveOwnerRow(added,0),false);assert.equal(c.moveOwnerRow(added,4),false);
+ assert.equal(c.moveOwnerRow(added,1),true);
+ assert.equal(c.getData()[0].name,'補入');
+ const html=c.buildExportRows(c.getData(),100);
+ assert.ok(html.indexOf('補入')<html.indexOf('甲'));
+});
