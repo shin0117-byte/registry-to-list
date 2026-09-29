@@ -1,8 +1,12 @@
+function ocrAuthHeaders(code) {
+  if (!/^[\x21-\x7E]+$/.test(code)) throw new Error('OCR 使用碼只能使用半形英數及符號；請貼上管理員提供的完整使用碼，不要輸入中文或全形字元。');
+  return {Authorization:'Bearer ' + code};
+}
 async function validateOcrAccess() {
   if (!document.querySelector('#cloudConsent').checked) throw new Error('請先勾選同意將文件頁面傳送至雲端辨識');
   const code = document.querySelector('#cloudAccessCode').value.trim();
   if (!code) throw new Error('請輸入管理員提供的使用碼');
-  const response = await fetch(cloudBaseUrl() + '/api/ocr/check', {headers:{Authorization:'Bearer '+code},signal:AbortSignal.timeout(15000)});
+  const response = await fetch(cloudBaseUrl() + '/api/ocr/check', {headers:ocrAuthHeaders(code),signal:AbortSignal.timeout(15000)});
   const body = await response.json().catch(()=>({}));
   if (!response.ok) throw new Error(response.status===404?'服務尚未更新使用碼預先驗證功能，請聯絡管理員更新':body.error||'無法驗證使用碼，尚未讀取文件');
   if (document.querySelector('#cloudAccessCode').value.trim()!==code) throw new Error('使用碼已變更，請重新開始');
@@ -51,7 +55,7 @@ async function runGoogleOcr(images, progress) {
     for (let attempt = 0; ; attempt++) {
       const response = window.prepaid?.active ? await window.prepaid.request(index,image,code,progress) : await fetch(cloudBaseUrl() + '/api/ocr', {
         method:'POST', signal:AbortSignal.timeout(90000),
-        headers:{'Content-Type':'application/json','Authorization':'Bearer ' + code},
+        headers:{'Content-Type':'application/json',...ocrAuthHeaders(code)},
         body:JSON.stringify({image})
       });
       body = await response.json().catch(() => ({}));
@@ -90,7 +94,7 @@ async function refreshGoogleUsage() {
   let loaded = false;
   try {
     const response = await fetch(cloudBaseUrl() + '/api/usage', {
-      headers:{Authorization:'Bearer ' + code}, signal:AbortSignal.timeout(60000)
+      headers:ocrAuthHeaders(code), signal:AbortSignal.timeout(60000)
     });
     const body = await response.json().catch(() => ({}));
     if (response.status === 404) throw new Error('雲端尚未更新監控功能，請管理員執行更新腳本。');

@@ -2,7 +2,7 @@
  const el=id=>document.getElementById(id),storageKey='registry-prepaid-pending-v1';
  let enabled=false,batch=null,historyCursor='';
  const base=()=>cloudBaseUrl();
- const auth=code=>({Authorization:'Bearer '+code});
+ const auth=code=>ocrAuthHeaders(code);
  const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
  const fingerprint=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
  function saved(){try{return JSON.parse(sessionStorage.getItem(storageKey));}catch{return null;}}
