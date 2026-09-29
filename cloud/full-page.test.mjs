@@ -40,7 +40,7 @@ test('full PDF mode produces one image per page and uses only Google output',asy
  assert.ok(result.images.every(job=>job.kind==='page'));
  assert.equal(renders,3); assert.equal(canvasCount,3); assert.equal(textCalls,0);
  assert.equal(context.chooseExtractionText('ocr','old text','Google OCR text'),'Google OCR text');
- assert.equal(context.chooseExtractionText('auto','direct','ocr'),'direct\nocr');
+ assert.equal(context.chooseExtractionText('auto','direct','ocr'),'direct');
  const direct=await context.collectSourceContent([{type:'application/pdf',name:'test.pdf',arrayBuffer:async()=>new ArrayBuffer(0)}],'direct',()=>{},async()=>pdfjs);
  assert.equal(direct.images.length,0);
  assert.equal(textCalls,3);

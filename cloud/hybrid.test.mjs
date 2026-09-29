@@ -21,14 +21,14 @@ test('hybrid mode gets PDF text but sends exactly one full-page image even with 
  assert.equal(new Set(r.images.map(x=>x.pageKey)).size,4);
  assert.ok(r.pages.every(x=>x.directText===text.trim()));
 });
-test('matching owner fills missing image address and share; conflicts prefer OCR and retain text in notes',()=>{
+test('matching owner uses OCR only to fill missing address and share',()=>{
  const c=setup();
  const result=c.reconcileOwners([base],[{...base,name:'休＊＊',address:'新北市三芝區測試路1號',numerator:'1',denominator:'3',shareAvailable:true}]);
- assert.equal(result.length,1);assert.equal(result[0].name,'休＊＊');
+ assert.equal(result.length,1);assert.equal(result[0].name,'林＊＊');
  assert.equal(result[0].address,'新北市三芝區測試路1號');
- assert.equal(result[0].denominator,'3');
- assert.ok(result[0].review.some(x=>x.includes('姓名不一致')));
+ assert.equal(result[0].denominator,'3');assert.deepEqual(Array.from(result[0].review),[]);
 });
+
 test('document scope and registration order prevent address misalignment across files',()=>{
  const c=setup();
  const pages=[{fileKey:'a',pageKey:'a1',directText:record('0010','林＊＊','')},{fileKey:'b',pageKey:'b1',directText:record('0010','王＊＊','')}];
@@ -43,7 +43,7 @@ test('unknown matches are not paired by position or masked surname; missing shar
  const result=c.reconcileOwners([{...base,sequence:'',registrationSequence:''}],[{...base,sequence:'',registrationSequence:'',address:'別人的住址'}]);
  assert.equal(result.length,2);assert.equal(result[0].address,'');
  assert.equal(result[0].numerator,'');
- assert.ok(result[1].review.some(x=>x.includes('是否為遺漏或重複')));
+ assert.deepEqual(Array.from(result[1].review),[]);
 });
 test('multiline image address is retained and duplicate registration headings do not split records',()=>{
  const c=setup();
@@ -100,22 +100,23 @@ test('county comes from jurisdiction authority, never issuer or owner address',(
  assert.equal(c.extractLandFields('屏東縣恆春鎮頂水泉段0691-0000地號 資料管轄機關：屏東縣恆春地政事務所 土地標示部').district,'屏東縣恆春鎮');
  assert.equal(c.extractLandFields('恆春鎮頂水泉段0691-0000地號 謄本核發機關：臺北市某地政事務所 土地標示部 土地所有權部 住址：高雄市').district,'恆春鎮');
 });
-test('OCR conflicts replace owner fields and retain both values for review',()=>{
+test('PDF text wins every conflicting owner field and valid share',()=>{
  const c=setup(),direct={...base,shareAvailable:true,numerator:'1',denominator:'2',common:true,address:'舊路1號',date:'民國110.01.01',reason:'買賣'};
  const scan={...direct,name:'李＊＊',address:'新路2號',numerator:'3',denominator:'4',common:false,date:'民國111.01.01',reason:'繼承'};
  const result=c.reconcileOwners([direct],[scan])[0];
- for(const key of ['name','address','date','numerator','denominator','common'])assert.equal(result[key],scan[key]);
- assert.ok(result.review.some(x=>x.includes('文字：舊路1號；採用OCR：新路2號')));
- assert.ok(result.review.some(x=>x.includes('文字：1／2；採用OCR：3／4')));
- const missing=c.reconcileOwners([direct],[{...scan,address:'',shareAvailable:false}])[0];
- assert.equal(missing.address,direct.address);assert.equal(missing.denominator,'2');
+ for(const key of ['name','id','address','date','reason','numerator','denominator','common'])assert.equal(result[key],direct[key]);
+ assert.deepEqual(Array.from(result.review),[]);
+ const missing=c.reconcileOwners([{...direct,address:'',shareAvailable:false}],[scan])[0];
+ assert.equal(missing.address,scan.address);assert.equal(missing.denominator,'4');
 });
-test('land conflicts prefer OCR and preserve original in supplemental notes',()=>{
+
+test('land fields prefer PDF text and OCR fills only missing values',()=>{
  const c=setup();
  const r=c.reconcileLandFields('恆春鎮頂水泉段0691-0000地號 土地標示部 公告土地現值：8000 使用分區：一般農業區','恆春鎮頂水泉段0691-0000地號 土地標示部 公告土地現值：8200 使用分區：國家公園區');
- assert.equal(r.fields.value,'8200');assert.equal(r.fields.zoning,'國家公園區');
- assert.ok(r.review.some(x=>x.includes('文字：8000；採用OCR：8200')));
+ assert.equal(r.fields.value,'8000');assert.equal(r.fields.zoning,'一般農業區');
+ assert.deepEqual(Array.from(r.review),[]);
 });
+
 test('red watermark fading preserves black, gray, blue and dark overlapping strokes',()=>{
  const c=setup();
  const pixels=new Uint8ClampedArray([255,70,70,255, 0,0,0,255, 120,120,120,255, 30,30,240,255, 90,15,15,255, 255,240,240,255]);
@@ -130,46 +131,39 @@ test('watermark decode failures safely retain original image and do not call OCR
  await c.prepareWatermarkImages(jobs,()=>{});
  assert.equal(jobs.length,2);assert.equal(jobs[0].blob,blob);assert.equal(jobs[1].pageKey,'two');
 });
-test('invalid ID is not recorded, trailing name digits removed, reason prefers text',()=>{
+test('invalid OCR ID and name suffix do not pollute PDF text or notes',()=>{
  const c=setup();
  const direct={...base,name:'林＊＊',id:'A123****89',reason:'買賣'};
  const scan={...base,name:'林＊＊123',id:'A123****891',reason:'繼承'};
  const r=c.reconcileOwners([direct],[scan])[0];
  assert.equal(r.id,direct.id);assert.equal(r.name,'林＊＊');assert.equal(r.reason,'買賣');
- assert.ok(r.review.some(x=>x.includes('採用文字：買賣；OCR：繼承')));
- assert.ok(r.review.some(x=>x.includes('非10碼')));
+ assert.deepEqual(Array.from(r.review),[]);
  assert.equal(c.validateOwnerIdentity(scan).id,'');
  assert.equal(c.validateOwnerIdentity({name:'王＊＊１２',id:'A12'}).name,'王＊＊');
- assert.equal(c.genderFromId('A123****891'),'—');
  assert.equal(c.reconcileOwners([{...direct,reason:''}],[scan])[0].reason,'繼承');
 });
-test('nonblank other registration notes retain parentheses and remain owner scoped',()=>{
+
+test('owner notes retain only relevant registration restrictions',()=>{
  const c=setup();
  assert.equal(c.registrationNotes('其他登記事項：（空白）').length,0);
- assert.equal(c.registrationNotes('其他登記事項：( 空 白 )').length,0);
- const text=record('0010','林＊＊','甲路')+'\n其他登記事項：（限制事項）另有說明\n'+record('0020','王＊＊','乙路')+'\n其他登記事項：（空白）';
+ const text=record('0010','林＊＊','甲路')+'\n其他登記事項：假扣押；（空白）\n'+record('0020','王＊＊','乙路')+'\n其他登記事項：（空白）';
  const owners=c.parsedOwners(text);
- assert.ok(owners[0].review.includes('有其他登記事項：（限制事項）另有說明'));
+ assert.ok(owners[0].review.includes('假扣押'));
  assert.equal(owners[1].review.length,0);
- const merged=c.reconcileOwners(owners,[{...owners[0],review:[]}]);
- assert.ok(merged[0].review.some(x=>x.includes('限制事項')));
 });
-test('land registration notes go to supplemental notes and ignore owner notes',()=>{
+
+test('land notes keep restriction notices and omit ordinary registration text',()=>{
  const c=setup();
- const text='土地標示部 其他登記事項：（重測前：水泉段0430-0000地號） 土地所有權部 其他登記事項：（另一事項）';
+ const text='土地標示部 其他登記事項：重測前地號；查封 土地所有權部 其他登記事項：未辦繼承';
  const r=c.reconcileLandFields(text,'土地標示部 其他登記事項：（空白）');
- assert.ok(r.review.includes('有其他登記事項：（重測前：水泉段0430-0000地號）'));
- assert.ok(!r.review.some(x=>x.includes('另一事項')));
+ assert.ok(r.review.some(x=>x.includes('查封')));
+ assert.ok(!r.review.some(x=>x.includes('未辦繼承')));
+ assert.ok(!r.review.some(x=>x.includes('重測前地號') && !x.includes('查封')));
 });
-test('other-rights heading warns from either source once, including spaced headings',()=>{
+
+test('other-rights heading alone creates no note; actual restrictions do',()=>{
  const c=setup();
- const heading='土 地 他 項\n權 利 部';
- assert.equal(c.otherRightsNotes(heading).length,1);
- assert.equal(c.otherRightsNotes('土地所有權部').length,0);
- assert.equal(c.otherRightsNotes('').length,0);
- for(const [direct,ocr] of [[heading,''],['',heading],[heading,heading]]){
-  const r=c.reconcileLandFields(direct,ocr);
-  assert.equal(r.review.filter(x=>x.includes('土地他項權利部')).length,1);
- }
- assert.equal(c.otherRightsNotes('土地他項權利部（空白）').length,1);
+ assert.equal(c.otherRightsNotes('土 地 他 項\n權 利 部').length,0);
+ assert.ok(c.otherRightsNotes('土地他項權利部\n假扣押，債權人甲').some(x=>x.includes('假扣押')));
+ assert.deepEqual(Array.from(c.reconcileLandFields('土地他項權利部（空白）','').review),[]);
 });

@@ -9,7 +9,7 @@ function setup({storage=new Map(),paid=true,balance=10}={}){
  const node=id=>{if(!nodes.has(id))nodes.set(id,{value:'test-customer-code',textContent:'',hidden:true,addEventListener(){}});return nodes.get(id);};
  const ctx=vm.createContext({window:{},document:{getElementById:node},crypto:webcrypto,TextEncoder,AbortSignal,setTimeout:f=>f(),
   sessionStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
-  cloudBaseUrl:()=> 'https://test.example',confirm:s=>{confirms.push(s);return true;},
+  cloudBaseUrl:()=> 'https://test.example',ocrAuthHeaders:code=>({Authorization:'Bearer '+code}),confirm:s=>{confirms.push(s);return true;},
   fetch:async(url,opts)=>{
    requests.push({url,opts});
    if(url.endsWith('/api/health'))return {ok:true,json:async()=>({billingEnabled:paid})};
