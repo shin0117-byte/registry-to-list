@@ -9,7 +9,8 @@ function build(snapshot,Excel){
  const book=new Excel.Workbook();book.creator='謄本轉清冊';book.title=[fields.district,fields.section,fields.parcel].map(text).join('')+'地號清冊';
  const sheet=book.addWorksheet('清冊',{views:[{showGridLines:false,state:'frozen',ySplit:6}],pageSetup:{paperSize:8,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.39,right:.39,top:.39,bottom:.39,header:.15,footer:.2},printTitlesRow:'6:6'}});
  sheet.headerFooter.oddFooter='&C第 &P／&N 頁';
- const widths=model.ownerColumnPercentages.map(n=>147*n/100);sheet.columns=widths.map(width=>({width}));
+ // Keep serial, owner name and share compact; give the released space to addresses and notes.
+ const widths=[3.5,7,29.5,11,8,8,8,25].map(n=>147*n/100);sheet.columns=widths.map(width=>({width}));
  function style(row,head=false){
   row.eachCell({includeEmpty:true},cell=>{cell.font={name:'Microsoft JhengHei',size:10.5,bold:head};cell.alignment={vertical:'top',wrapText:true,...(head?{horizontal:'center'}:{})};cell.border=border;if(head)cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE4EFED'}};});
  }

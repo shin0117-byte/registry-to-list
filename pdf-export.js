@@ -17,8 +17,9 @@ function definition(snapshot){
   const group=row.commonGroupLabel||row.commonGroup;
   const note=text(row.note)+(group&&!text(row.note).includes(group)?'\n公同共有 '+group:'');
   const cells=[String(index+1),wrap(model.ownerName(row.name)||'（姓名待確認）'),wrap(model.address(row.address)||'—'),wrap(fraction?fraction.numerator+'／'+fraction.denominator:'—'),value,model.displayDate(row.date)||'—',model.reason(row.reason),wrap(note)];
+  for(const column of [5,6])cells[column]={text:cells[column],alignment:'center'};
   for(const [column,key] of [[3,'share'],[4,'share'],[5,'date'],[6,'reason']]){
-   const count=spans[key][index];if(count===0)cells[column]={};else if(count>1)cells[column]={text:cells[column],rowSpan:count};
+   const count=spans[key][index];if(count===0)cells[column]={};else if(count>1)cells[column]={...(typeof cells[column]==='object'?cells[column]:{text:cells[column]}),rowSpan:count};
   }
   body.push(cells);
  });

@@ -11,6 +11,8 @@ test('XLSX round trip preserves actual workbook, typed area and A3 print setup',
  const book=build([owner('甲'),owner('乙')]),data=await book.xlsx.writeBuffer();assert.equal(String.fromCharCode(...data.subarray(0,2)),'PK');
  const loaded=new Excel.Workbook();await loaded.xlsx.load(data);const s=loaded.worksheets[0];
  assert.equal(s.name,'清冊');assert.equal(s.pageSetup.paperSize,8);assert.equal(s.pageSetup.orientation,'portrait');assert.equal(s.pageSetup.fitToWidth,1);assert.equal(s.pageSetup.fitToHeight,0);
+ assert.ok(s.getColumn(1).width<5.88);assert.ok(s.getColumn(2).width<13.23);assert.ok(s.getColumn(4).width<20.58);
+ assert.ok(Math.abs(s.columns.reduce((sum,col)=>sum+col.width,0)-147)<.01);
  assert.equal(s.getCell('A1').alignment.horizontal,'center');assert.equal(s.getCell('F7').value,'114.03.07');assert.equal(s.getCell('F7').numFmt,'@');
  assert.equal(typeof s.getCell('E7').value,'number');assert.equal(s.getCell('E7').value,15.13);assert.equal(s.getCell('A8').value,2);
 });

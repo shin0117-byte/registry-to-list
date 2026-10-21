@@ -33,8 +33,10 @@ test('PDF compacts ROC dates and merges only identical adjacent group fields',()
  ];
  const t=context.RegistryPdf.definition({fields:{area:100},rows}).content.find(x=>x.table).table;
  assert.equal(t.body[1][3].rowSpan,3);assert.equal(t.body[1][4].rowSpan,3);
- assert.equal(t.body[1][5],'114.03.07');assert.equal(t.body[2][5].rowSpan,2);
- assert.equal(t.body[1][6].rowSpan,2);assert.equal(t.body[3][6],'買賣');
+ assert.equal(t.body[1][5].text,'114.03.07');assert.equal(t.body[1][5].alignment,'center');assert.equal(t.body[2][5].rowSpan,2);
+ assert.equal(t.body[1][6].rowSpan,2);assert.equal(t.body[3][6].text,'買賣');assert.equal(t.body[3][6].alignment,'center');
+ assert.equal(t.body[2][5].alignment,'center');assert.equal(t.body[1][6].alignment,'center');
+ assert.deepEqual(Object.keys(t.body[3][5]),[]);assert.deepEqual(Object.keys(t.body[2][6]),[]);
  assert.equal(t.body[0][5].text,'原因發生日期\n（民國）');
  assert.ok(t.widths[5]<59);
 });
