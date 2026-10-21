@@ -84,3 +84,22 @@ test('field spans respect differing values, blank/invalid fields, document and g
  for(const value of Object.values(M.commonCellSpans([invalid,invalid])))assert.deepEqual(Array.from(value),[1,1]);
  assert.equal(M.displayDate('民國056年07月06日'),'056.07.06');assert.equal(M.displayDate('非日期'),'');
 });
+
+test('saved DOM rows retain explicit group relations when grouped again',()=>{
+ const refs=['0142','0158','0172','0173','0174','0175','0176'];
+ const original=M.groupOwners(refs.map(reg=>({name:'測試甲',documentKey:'doc',registrationSequence:reg,common:true,commonRefs:refs,numerator:'1',denominator:'1'})));
+ const saved=JSON.parse(JSON.stringify(original));saved.forEach(r=>delete r.common);
+ const restored=M.groupOwners(saved);
+ assert.equal(new Set(restored.map(r=>r.commonGroup)).size,1);
+ assert.ok(restored.every(r=>r.groupVerified));assert.equal(M.summary(restored,100).balanced,true);
+});
+test('legacy drafts are detected from missing provenance and unverified groups cannot inflate totals',()=>{
+ const legacy={fields:{},rows:[{name:'甲',commonGroup:'共-old-66',numerator:'1',denominator:'2'},{name:'乙',commonGroup:'共-old-81',numerator:'1',denominator:'2'}]};
+ assert.equal(M.legacyDraft(legacy),true);
+ const summary=M.summary(legacy.rows,100);
+ assert.equal(summary.totalFraction,'0/1');assert.equal(summary.balanced,false);
+ assert.ok(summary.groups.every(g=>g.area==='—'&&g.status.includes('未納入合計')));
+ assert.equal(M.legacyDraft({...legacy,schemaVersion:2}),false);
+ assert.equal(M.legacyDraft({...legacy,schemaVersion:2,needsSourceRebuild:true}),true);
+ assert.equal(M.legacyDraft({rows:[{commonGroup:'g',registrationSequence:'0142',commonRefs:['0142'],groupVerified:true}]}),false);
+});

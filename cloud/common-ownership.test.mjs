@@ -130,3 +130,22 @@ test('typing an incomplete date does not detach the rest of a merged cell',()=>{
  }
  assert.equal(rows.children[0].children[8].rowSpan,2);
 });
+
+test('old draft recovery is marked and reimport backs it up before replacing old rows',()=>{
+ const {context:c,rows}=setup(),saved=new Map();
+ const old={fields:{},rows:[owner('舊甲',{commonGroup:'共-old-66'}),owner('舊乙',{commonGroup:'共-old-81'})]};
+ c.localStorage.getItem=()=>JSON.stringify(old);c.localStorage.setItem=(k,v)=>saved.set(k,v);
+ const loaded=[];c.addRow=(values,metadata)=>loaded.push(metadata);c.restoreDraft();
+ assert.equal(c.captureSnapshot().needsSourceRebuild,true);
+ assert.match(c.summaryHtml(c.RegistryModel.summary(old.rows,100)),/舊版草稿/);
+ rows.children=loaded.map(mockRow);rows.children.forEach(r=>{r.remove=()=>rows.children.splice(rows.children.indexOf(r),1);});
+ c.replaceRecognizedRows();
+ assert.equal(rows.children.length,0);assert.equal(c.captureSnapshot().needsSourceRebuild,false);
+ const backup=JSON.parse(saved.get('registry-draft-before-reimport'));
+ assert.equal(backup.rows.length,2);assert.equal(backup.needsSourceRebuild,true);
+});
+test('failed backup cannot clear old recognized rows',()=>{
+ const {context:c,rows}=setup();rows.children=[mockRow(owner('保留甲',{commonGroup:'g'}))];
+ c.localStorage.setItem=()=>{throw new Error('quota');};
+ assert.throws(()=>c.replaceRecognizedRows(),/quota/);assert.equal(rows.children.length,1);
+});

@@ -124,7 +124,7 @@ function groupOwners(items){
  const find=x=>{if(!parents.has(x))parents.set(x,x);if(parents.get(x)!==x)parents.set(x,find(parents.get(x)));return parents.get(x);};
  const join=(a,b)=>{const x=find(a),y=find(b);if(x!==y)parents.set(y,x);};
  const scope=o=>o.documentKey||str(o.sequence).split(':').slice(0,-1).join(':')||'document';
- for(const o of items)if(o.common&&o.commonRefs?.length){const ids=o.commonRefs.map(id=>scope(o)+':'+id);ids.forEach(id=>join(ids[0],id));}
+ for(const o of items)if((o.common||o.commonGroup)&&o.commonRefs?.length){const ids=o.commonRefs.map(id=>scope(o)+':'+id);ids.forEach(id=>join(ids[0],id));}
  for(const key of parents.keys()){const r=find(key);if(!refsByRoot.has(r))refsByRoot.set(r,[]);refsByRoot.get(r).push(key.split(':').at(-1));}
  const names=new Map();let count=0;
  return items.map((o,i)=>{
@@ -156,16 +156,20 @@ function summary(items,landArea){
  for(const g of groups.values()){
   const f=fraction(g.members[0]),same=f&&g.members.every(x=>{const v=fraction(x);return v&&BigInt(v.numerator)*BigInt(f.denominator)===BigInt(f.numerator)*BigInt(v.denominator);});
   const present=new Set(g.members.map(x=>x.registrationSequence));const missing=g.expected.filter(x=>!present.has(x));
-  let status=[];if(!same){invalid++;status.push('同組持分不一致，未計入');}else add(f);
-  if(!g.verified)status.push('組別關聯待確認');if(missing.length)status.push('缺少主次序 '+missing.join('、'));
+  let status=[];if(!same){invalid++;status.push('同組持分不一致，未計入');}else if(g.verified)add(f);
+  if(!g.verified)status.push('組別關聯待確認，未納入合計');if(missing.length)status.push('缺少主次序 '+missing.join('、'));
   if(status.length)issues.push(g.label+'：'+status.join('；'));
-  output.push({key:g.key,label:g.label,rows:g.rows,registrationSequences:g.expected.length?g.expected:g.members.map(x=>x.registrationSequence).filter(Boolean),memberCount:g.members.length,expectedCount:g.expected.length,numerator:f?.numerator||'',denominator:f?.denominator||'',area:same?(Number(landArea||0)*Number(f.numerator)/Number(f.denominator)*.3025).toFixed(2):'—',status:status.join('；')||'完整',valid:!!same&&g.verified&&!missing.length});
+  output.push({key:g.key,label:g.label,rows:g.rows,registrationSequences:g.expected.length?g.expected:g.members.map(x=>x.registrationSequence).filter(Boolean),memberCount:g.members.length,expectedCount:g.expected.length,numerator:f?.numerator||'',denominator:f?.denominator||'',area:same&&g.verified?(Number(landArea||0)*Number(f.numerator)/Number(f.denominator)*.3025).toFixed(2):'—',status:status.join('；')||'完整',valid:!!same&&g.verified&&!missing.length});
  }
  const ratio=Number(n*1000000000000n/d)/1e12;
  const sharesComplete=!invalid&&output.every(g=>g.valid);
  const recordsComplete=[...documents.values()].every(entry=>entry.found===entry.expected);
  const complete=sharesComplete&&recordsComplete&&!issues.length;
  return {groups:output,issues:[...new Set(issues)],ratio,percent:(ratio*100).toFixed(4),area:(Number(landArea||0)*ratio*.3025).toFixed(2),landArea:(Number(landArea||0)*.3025).toFixed(2),complete,balanced:sharesComplete&&recordsComplete&&n===d,totalFraction:n+'/'+d,recordCount:items.length,managers:items.map((row,index)=>({row:index+1,owner:row.name||'姓名待確認',name:row.manager||'',address:row.managerAddress||'—'})).filter(row=>row.name)};
+}
+function legacyDraft(snapshot){
+ if(snapshot?.needsSourceRebuild)return true;
+ return (snapshot?.rows||[]).some(row=>row.commonGroup&&!row.registrationSequence&&!row.commonRefs?.length&&row.groupVerified!==true&&snapshot.schemaVersion!==2);
 }
 function ownerName(value){
  let name=str(value).replace(/\s/g,'');
@@ -190,5 +194,5 @@ function commonCellSpans(items){
  return result;
 }
 const ownerColumnPercentages=[4,9,26,14,8,8,8,23];
-root.RegistryModel={digits,clean,repairLabels,date,displayDate,ownerName,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
+root.RegistryModel={legacyDraft,digits,clean,repairLabels,date,displayDate,ownerName,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
 })(globalThis);

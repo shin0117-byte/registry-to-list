@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const rows = $('#rows');
-const state = { files: [], ocrEngine: '',  };
+const state = { files: [], ocrEngine: '', needsSourceRebuild:false };
 const demo = [
   ['羅＊＊','','大溪區龍潭鄉三洽水字1243番地',1,9,'---.--.--','總登記','108.7.22未辦繼承列冊'],
   ['卓先生','','桃園市龍潭區三和里店湖一路22號',1,3,'080.01.29','買賣',''],
@@ -123,9 +123,10 @@ function updateAll() {
     tr.querySelector('.gender').textContent = genderFromId(tr.querySelector('[data-key="id"]').value);
   });
   mergeCommonCells();
+  for(const id of ['#printBtn','#exportBtn']){const button=$(id);if(button){button.disabled=state.needsSourceRebuild;button.title=state.needsSourceRebuild?'舊草稿缺少主登記關聯，請先重新匯入原謄本':'';}}
   const summary=RegistryModel.summary(getData(),area);
   $('#totalArea').textContent = summary.area;
-  $('#totalRatio').textContent = '持分合計 '+summary.percent+'%　土地總面積 '+summary.landArea+' 坪'+(summary.complete?'':'（有未確認資料）');
+  $('#totalRatio').textContent = (summary.groups.some(g=>!g.valid)?'已確認持分小計 ':'持分合計 ')+summary.percent+'%　土地總面積 '+summary.landArea+' 坪'+(summary.complete?'':'（有未確認資料）');
   renderRegistrySummary(summary);
 }
 function toast(text) { const t=$('#toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
@@ -164,7 +165,7 @@ function buildExportRows(items,area) {
 }
 function summaryHtml(summary) {
  const header='<tr><th>組號</th><th>清冊次序</th><th>主登記次序</th><th>筆數</th><th>共同持分</th><th>合計坪數</th><th>核對</th></tr>';
- return '<p>共 '+summary.recordCount+' 筆；持分合計 '+summary.percent+'%，換算 '+summary.area+' 坪。土地總面積 '+summary.landArea+' 坪。</p>'+
+ return (state.needsSourceRebuild?'<p class="draft-warning" role="alert">目前載入舊版草稿，缺少主登記次序，組別無法自動復原。請選擇原謄本後重新辨識；舊草稿會先保留備份。<button type="button" onclick="document.querySelector(\'#sourceFile\').click()">選擇原謄本重建</button></p>':'')+'<p>共 '+summary.recordCount+' 筆；'+(summary.groups.some(g=>!g.valid)?'已確認持分小計 ':'持分合計 ')+summary.percent+'%，換算 '+summary.area+' 坪。土地總面積 '+summary.landArea+' 坪。</p>'+
   (summary.groups.length?'<table class="group-table"><thead>'+header+'</thead><tbody>'+summary.groups.map(g=>'<tr>'+[g.label,g.rows.join('、'),g.registrationSequences.join('、'),g.expectedCount?g.memberCount+'／'+g.expectedCount:g.memberCount,g.numerator+'／'+g.denominator,g.area,g.status].map(v=>'<td>'+escapeXml(v)+'</td>').join('')+'</tr>').join('')+'</tbody></table>':'<p>無公同共有組別。</p>')+
   (summary.managers.length?'<h3>管理者資料</h3><table class="group-table"><thead><tr><th>清冊次序</th><th>所有權人</th><th>管理者</th><th>管理者地址</th></tr></thead><tbody>'+summary.managers.map(m=>'<tr>'+[m.row,m.owner,m.name,m.address].map(v=>'<td>'+escapeXml(v)+'</td>').join('')+'</tr>').join('')+'</tbody></table>':'')+
   (summary.issues.length?'<details open><summary>待核對 '+summary.issues.length+' 項</summary><ul>'+summary.issues.map(issue=>'<li>'+escapeXml(issue)+'</li>').join('')+'</ul></details>':'');
@@ -183,8 +184,21 @@ if(typeof window!=='undefined') {
  window.addEventListener?.('beforeprint',preparePrintView);
  window.addEventListener?.('afterprint',()=>document.querySelector('#registryPrintSheet')?.remove());
 }
-function saveDraft() { localStorage.setItem('registry-draft', JSON.stringify({fields:Object.fromEntries(['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'].map(k=>[k,$('#'+k).value])), rows:getData()})); toast('草稿已儲存於本機瀏覽器'); }
-function restoreDraft() { try { const d=JSON.parse(localStorage.getItem('registry-draft')); if (!d) return; Object.entries(d.fields).forEach(([k,v])=>$('#'+k).value=v); d.rows.forEach(r=>addRow([r.name,r.id || '',r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r)); } catch {} }
+function saveDraft() { localStorage.setItem('registry-draft',JSON.stringify(captureSnapshot()));toast('草稿已儲存於本機瀏覽器'); }
+function restoreDraft() {
+ try{
+  const draft=JSON.parse(localStorage.getItem('registry-draft'));if(!draft)return;
+  state.needsSourceRebuild=RegistryModel.legacyDraft(draft);
+  Object.entries(draft.fields||{}).forEach(([k,v])=>{const field=$('#'+k);if(field)field.value=v;});
+  (draft.rows||[]).forEach(r=>addRow([r.name,r.id||'',r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r));
+ }catch{}
+}
+function replaceRecognizedRows() {
+ const previous=captureSnapshot();
+ if(previous.rows.length)localStorage.setItem('registry-draft-before-reimport',JSON.stringify(previous));
+ const imported=[...rows.children].filter(tr=>state.needsSourceRebuild||tr.dataset.ocrImported==='true'||/自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value));
+ imported.forEach(tr=>tr.remove());state.needsSourceRebuild=false;
+}
 function escapeXml(value='') { return String(value).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 function exportExcel() {
  const title=`${$('#district').value}${$('#section').value}${$('#parcel').value}地號清冊`,items=getData(),area=Number($('#area').value)||0;
@@ -205,7 +219,7 @@ async function exportPdf() {
 }
 function captureSnapshot() {
   const fields=['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'];
-  return {fields:Object.fromEntries(fields.map(k=>[k,$('#'+k).value])),rows:getData()};
+  return {schemaVersion:2,needsSourceRebuild:state.needsSourceRebuild,fields:Object.fromEntries(fields.map(k=>[k,$('#'+k).value])),rows:getData()};
 }
 function setupDesktopUpdater() {
   if (!window.desktopUpdater) return;
@@ -432,7 +446,6 @@ function rebuildPdfLines(items) {
   return lines.sort((a, b) => b.y - a.y).map(line => line.parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ')).join('\n');
 }
 async function applyExtractedData(landText, ownerText, addressTexts = [], reconciledOwners = null, reconciledLand = null) {
-  [...rows.children].filter(tr => tr.dataset.ocrImported === 'true' || /自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value)).forEach(tr => tr.remove());
   const cleanLand = cleanTranscriptText(landText).replace(/\s+/g, ' ').trim();
   const fields = reconciledLand ? reconciledLand.fields : extractLandFields(cleanLand); let filled = 0;
   if (!reconciledLand) reconciledLand = {review:[...registrationNotes(landText,true),...otherRightsNotes(landText)]};
@@ -453,6 +466,8 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
     owner.addressAvailable = documentHasAddress;
   });
   owners = groupCommonOwnership(owners);
+  if(!owners.length)throw new Error('未找到權利人，原清冊已保留');
+  replaceRecognizedRows();
   const ownerKey = owner => owner.sequence || [owner.name,owner.id,owner.numerator,owner.denominator,owner.commonGroup].join('|');
   const existing = new Set([...rows.children].map(tr => ownerKey({sequence:tr.dataset.sequence,name:tr.querySelector('[data-key="name"]').value,id:tr.querySelector('[data-key="id"]').value,numerator:tr.querySelector('[data-key="numerator"]').value,denominator:tr.querySelector('[data-key="denominator"]').value,commonGroup:tr.dataset.commonGroup})));
   const newOwners = owners.filter(owner => { const key=ownerKey(owner); if (existing.has(key)) return false; existing.add(key); return true; });
@@ -463,6 +478,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
       {...owner,relatedShareTypes:owner.relatedShareTypes || [],ocrImported:true});
   });
   updateAll();
+  localStorage.setItem('registry-draft',JSON.stringify(captureSnapshot()));
   toast(`讀取完成：土地資料帶入 ${filled} 項，新增權利人 ${newOwners.length} 筆。`);
 }
 function extractLandFields(text) {
