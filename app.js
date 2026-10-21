@@ -238,11 +238,16 @@ function replaceRecognizedRows(replaceAll=false) {
  imported.forEach(tr=>tr.remove());state.needsSourceRebuild=false;
 }
 function escapeXml(value='') { return String(value).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
+function exportDateSuffix(now=new Date()) {
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now);
+ const value=type=>parts.find(part=>part.type===type).value;
+ return String(Number(value('year'))-1911).padStart(3,'0')+value('month')+value('day');
+}
 async function exportExcel() {
  const button=$('#exportBtn'),label=button.textContent;button.disabled=true;button.textContent='正在產生 XLSX…';
  try{
   const snapshot=captureSnapshot(),title=[snapshot.fields.district,snapshot.fields.section,snapshot.fields.parcel].join('')+'地號清冊';
-  await RegistryExcel.download(snapshot,title.replace(/[\\/:*?"<>|]/g,'_')+'.xlsx');
+  await RegistryExcel.download(snapshot,title.replace(/[\\/:*?"<>|]/g,'_')+exportDateSuffix()+'.xlsx');
   toast('已匯出 XLSX 活頁簿，請查看瀏覽器下載項目');
  }catch(error){toast('Excel 匯出失敗：'+error.message);}
  finally{button.disabled=state.needsSourceRebuild;button.textContent=label;}
@@ -252,7 +257,7 @@ async function exportPdf() {
   try{
     const snapshot=captureSnapshot();
     const title=[snapshot.fields.district,snapshot.fields.section,snapshot.fields.parcel].join('')+'地號清冊';
-    await RegistryPdf.download(snapshot,title.replace(/[\\/:*?"<>|]/g,'_')+'.pdf');
+    await RegistryPdf.download(snapshot,title.replace(/[\\/:*?"<>|]/g,'_')+exportDateSuffix()+'.pdf');
     toast('PDF 檔已產生，請查看瀏覽器下載項目');
   }catch(error){toast('PDF 產生失敗：'+error.message);}
   finally{button.disabled=false;button.textContent=label;}
