@@ -25,6 +25,7 @@ test('app loads without missing functions or element references',async()=>{
   if(!elements.has(s)) elements.set(s,{addEventListener(){},children:[]});
   return elements.get(s);
  }},refreshCloudSetup(){},localStorage:{getItem:()=>null}});
+ vm.runInContext(await readFile(new URL('../registry-model.js',import.meta.url),'utf8'),context);
  vm.runInContext(await readFile(new URL('../app.js',import.meta.url),'utf8'),context);
  assert.equal(typeof context.autoGrowField,'function');
 });

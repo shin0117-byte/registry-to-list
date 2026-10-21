@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import vm from 'node:vm';
-const source=await readFile(new URL('../app.js',import.meta.url),'utf8');
+const source=(await readFile(new URL('../registry-model.js',import.meta.url),'utf8'))+'\n'+(await readFile(new URL('../app.js',import.meta.url),'utf8'));
 function setup(extra={}) {
  const ctx=vm.createContext({document:{querySelector:()=>({children:[],addEventListener(){}})},localStorage:{getItem:()=>null},refreshCloudSetup(){},...extra});
  vm.runInContext(source,ctx);return ctx;
@@ -166,4 +166,8 @@ test('other-rights heading alone creates no note; actual restrictions do',()=>{
  assert.equal(c.otherRightsNotes('土 地 他 項\n權 利 部').length,0);
  assert.ok(c.otherRightsNotes('土地他項權利部\n假扣押，債權人甲').some(x=>x.includes('假扣押')));
  assert.deepEqual(Array.from(c.reconcileLandFields('土地他項權利部（空白）','').review),[]);
+});
+test('business notes retain numeric court dates and case numbers while removing seal codes',()=>{
+ const c=setup();const note=c.businessNoteClauses('（限制登記事項）93年4月8日收件20860號\n依地方法院93執全243號辦理假扣押\nG8 債權人：測試銀行')[0];
+ assert.match(note,/93年4月8日/);assert.match(note,/20860/);assert.match(note,/93執全243/);assert.doesNotMatch(note,/G8/);
 });

@@ -34,6 +34,7 @@ test('full PDF mode produces one image per page and uses only Google output',asy
   },
   refreshCloudSetup(){},localStorage:{getItem:()=>null}
  });
+ vm.runInContext(await readFile(new URL('../registry-model.js',import.meta.url),'utf8'),context);
  vm.runInContext(await readFile(new URL('../app.js',import.meta.url),'utf8'),context);
  const result=await context.collectSourceContent([{type:'application/pdf',name:'test.pdf',arrayBuffer:async()=>new ArrayBuffer(0)}],'ocr',()=>{},async()=>pdfjs);
  assert.equal(result.images.length,3);
