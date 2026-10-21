@@ -103,3 +103,5 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
 
 .recent-scans h2{font-size:16px}.recent-scan-item{border-top:1px solid var(--line);padding:8px 0;overflow-wrap:anywhere}.recent-scan-item p{font-size:12px;line-height:1.5}.recent-scan-item button{font-size:11px;padding:5px;margin:2px}
 .save-status{font-size:12px;line-height:1.6;color:#176a6c;overflow-wrap:anywhere;margin:0 0 12px}.save-status[data-error="true"]{color:#9a4e25}
+
+@media print{#registryPrintSheet h1,#registryPrintSheet h2,#registryPrintSheet h3{text-align:center}}

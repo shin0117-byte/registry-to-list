@@ -10,7 +10,7 @@ function definition(snapshot){
  const percentages=model.ownerColumnPercentages;
  const widths=percentages.map(n=>available*n/100);
  const headers=['次序','姓名','地址','持分','持分坪數','原因發生日期\n（民國）','登記原因','備註／組號'];
- const body=[headers.map((value,index)=>({text:value,fillColor:'#e4efed',bold:true,...(index===5?{fontSize:9}:{})}))];
+ const body=[headers.map((value,index)=>({text:value,fillColor:'#e4efed',alignment:'center',bold:true,...(index===5?{fontSize:9}:{})}))];
  const spans=model.commonCellSpans(items);
  items.forEach((row,index)=>{
   const fraction=model.fraction(row),value=fraction?(area*Number(fraction.numerator)/Number(fraction.denominator)*.3025).toFixed(2):'—';
@@ -23,24 +23,24 @@ function definition(snapshot){
   body.push(cells);
  });
  const content=[
-  {text:title,fontSize:16,bold:true,margin:[0,0,0,8]},
+  {text:title,fontSize:16,bold:true,alignment:'center',margin:[0,0,0,8]},
   {text:'土地總面積：'+text(f.area||'—')+' m²（'+summary.landArea+' 坪）　'+text(f.valuePeriod)+' 公告現值：'+text(f.value||'—')+' 元／m²',margin:[0,0,0,5]},
   {text:'使用分區：'+text(f.zoning||'—')+'　使用地類別：'+text(f.landCategory||'—'),margin:[0,0,0,5]},
   ...(f.building?[{text:'補充資訊：'+text(f.building),margin:[0,0,0,5]}]:[]),
   {text:'依原謄本順序列示；相同組號為同一公同共有關係，共同持分於組別合計只計一次。',fontSize:9,margin:[0,0,0,8]},
   {table:{headerRows:1,widths,body,dontBreakRows:false},layout},
-  {text:'共有組別合計',fontSize:13,bold:true,margin:[0,14,0,6]}
+  {text:'共有組別合計',fontSize:13,bold:true,alignment:'center',margin:[0,14,0,6]}
  ];
  if(summary.groups.length){
   const groupWidth=841.89-48-56-4;
-  const groupBody=[['組號','清冊次序','主登記次序','筆數','共同持分','合計坪數','核對'].map(t=>({text:t,fillColor:'#e4efed'})),
+  const groupBody=[['組號','清冊次序','主登記次序','筆數','共同持分','合計坪數','核對'].map(t=>({text:t,fillColor:'#e4efed',alignment:'center'})),
    ...summary.groups.map(g=>[g.label,wrap(g.rows.join('、')),wrap(g.registrationSequences.join('、')),g.expectedCount?g.memberCount+'／'+g.expectedCount:String(g.memberCount),wrap(g.numerator+'／'+g.denominator),g.area,g.status])];
   content.push({table:{headerRows:1,widths:[6,17,24,6,19,9,19].map(n=>groupWidth*n/100),body:groupBody,dontBreakRows:false},layout});
  }else content.push({text:'無公同共有組別。'});
  content.push({text:'逐筆持分合計：'+summary.percent+'%　換算 '+summary.area+' 坪（共同持分每組計一次）。',margin:[0,8,0,0]},
   {text:summary.balanced?'持分合計為 100%。':'持分合計或組別關聯尚待核對。',color:summary.balanced?'#176a6c':'#9a4e25',margin:[0,4,0,0]});
- if(summary.managers.length)content.push({text:'管理者資料',fontSize:13,bold:true,margin:[0,12,0,6]},{table:{headerRows:1,widths:[50,100,170,841.89-48-32-2.5-320],body:[['清冊次序','所有權人','管理者','管理者地址'],...summary.managers.map(m=>[String(m.row),wrap(m.owner),wrap(m.name),wrap(m.address)])]},layout});
- if(summary.issues.length)content.push({text:'待核對事項',fontSize:13,bold:true,margin:[0,12,0,6]},{ul:summary.issues.map(wrap),fontSize:10});
+ if(summary.managers.length)content.push({text:'管理者資料',fontSize:13,bold:true,alignment:'center',margin:[0,12,0,6]},{table:{headerRows:1,widths:[50,100,170,841.89-48-32-2.5-320],body:[['清冊次序','所有權人','管理者','管理者地址'].map(value=>({text:value,alignment:'center'})),...summary.managers.map(m=>[String(m.row),wrap(m.owner),wrap(m.name),wrap(m.address)])]},layout});
+ if(summary.issues.length)content.push({text:'待核對事項',fontSize:13,bold:true,alignment:'center',margin:[0,12,0,6]},{ul:summary.issues.map(wrap),fontSize:10});
  return {pageSize:'A3',pageOrientation:'portrait',pageMargins:[24,28,24,36],defaultStyle:{font:'RegistryCJK',fontSize:10.5,lineHeight:1.2,color:'#17212b'},info:{title,creator:'謄本轉清冊'},content,
   footer:(current,total)=>({text:'第 '+current+'／'+total+' 頁',alignment:'center',fontSize:9,margin:[0,8,0,0]})};
 }
