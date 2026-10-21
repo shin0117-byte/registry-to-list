@@ -236,12 +236,14 @@ function replaceRecognizedRows(replaceAll=false) {
  imported.forEach(tr=>tr.remove());state.needsSourceRebuild=false;
 }
 function escapeXml(value='') { return String(value).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
-function exportExcel() {
- const title=`${$('#district').value}${$('#section').value}${$('#parcel').value}地號清冊`,items=getData(),area=Number($('#area').value)||0;
- const summary=RegistryModel.summary(items,area),headers=['次序','姓名','地址','持分','持分坪數','原因發生日期<br>（民國）','登記原因','備註／組號'];
- const options='<xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>清冊</x:Name><x:WorksheetOptions><x:PageSetup><x:Layout x:Orientation="Portrait"/></x:PageSetup><x:FitToPage/><x:Print><x:PaperSizeIndex>8</x:PaperSizeIndex><x:FitWidth>1</x:FitWidth><x:FitHeight>0</x:FitHeight></x:Print></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml>';
- const html='<!doctype html><html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]>'+options+'<![endif]--><style>@page{size:A3 portrait;margin:10mm}body{font-family:"Microsoft JhengHei";font-size:10pt}table{border-collapse:collapse;table-layout:fixed;width:100%}td,th{border:1px solid #999;padding:5px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-wrap:break-word}th{background:#e4efed}h1{font-size:16pt}thead{display:table-header-group}.date-heading{font-size:8pt}.date-cell{white-space:nowrap;font-variant-numeric:tabular-nums;mso-number-format:"\\@"}</style></head><body><h1>'+escapeXml(title)+'</h1><p>土地總面積：'+area+' m²（'+summary.landArea+' 坪）　'+escapeXml(landValueLabel())+escapeXml($('#value').value)+' 元／m²</p><p>依原謄本排序；同組共同持分另列合計，每組計一次。</p><table><colgroup>'+RegistryModel.ownerColumnPercentages.map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+headers.map((x,i)=>'<th'+(i===5?' class="date-heading"':'')+'>'+x+'</th>').join('')+'</tr></thead><tbody>'+buildExportRows(items,area)+'</tbody></table><h2>共有組別合計與核對</h2>'+summaryHtml(summary)+'</body></html>';
- const blob=new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=title+'.xls';link.click();URL.revokeObjectURL(link.href);toast('已匯出 A3 直式 Excel 相容清冊');
+async function exportExcel() {
+ const button=$('#exportBtn'),label=button.textContent;button.disabled=true;button.textContent='正在產生 XLSX…';
+ try{
+  const snapshot=captureSnapshot(),title=[snapshot.fields.district,snapshot.fields.section,snapshot.fields.parcel].join('')+'地號清冊';
+  await RegistryExcel.download(snapshot,title.replace(/[\\/:*?"<>|]/g,'_')+'.xlsx');
+  toast('已匯出 XLSX 活頁簿，請查看瀏覽器下載項目');
+ }catch(error){toast('Excel 匯出失敗：'+error.message);}
+ finally{button.disabled=state.needsSourceRebuild;button.textContent=label;}
 }
 async function exportPdf() {
   const button=$('#printBtn');button.disabled=true;const label=button.textContent;button.textContent='正在產生 PDF…';
