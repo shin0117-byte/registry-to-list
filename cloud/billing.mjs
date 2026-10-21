@@ -1,6 +1,11 @@
 import {createHash,createCipheriv,createDecipheriv,randomBytes} from 'node:crypto';
 export const plans=Object.freeze({light:{points:100,twd:199},standard:{points:500,twd:499},bulk:{points:1500,twd:999}});
 export const fail=(status,message)=>Object.assign(new Error(message),{status});
+export function normalizeCustomerCode(value){
+ if(typeof value!=='string')return '';
+ const raw=value.trim();if(/^ocr_[a-f0-9]{64}$/.test(raw))return raw;
+ const short=raw.replace(/[- ]/g,'').toUpperCase();return /^[A-HJ-NP-Z2-9]{16}$/.test(short)?short:'';
+}
 const hash=s=>createHash('sha256').update(s).digest('hex');
 const operation=s=>{if(typeof s!=='string'||!/^[a-zA-Z0-9_-]{16,100}$/.test(s))throw fail(400,'操作編號無效');return s;};
 const accountPath=id=>{if(!/^[a-f0-9]{64}$/.test(id||''))throw fail(400,'客戶編號無效');return 'ocrAccounts/'+id;};
@@ -25,7 +30,7 @@ export class Billing {
    const decipher=createDecipheriv('aes-256-gcm',key,Buffer.from(envelope.iv,'base64'));
    decipher.setAAD(Buffer.from(id));decipher.setAuthTag(Buffer.from(envelope.tag,'base64'));
    const code=Buffer.concat([decipher.update(Buffer.from(envelope.data,'base64')),decipher.final()]).toString('utf8');
-   if(!/^ocr_[a-f0-9]{64}$/.test(code)||hash(code)!==id)throw new Error();
+   if(!normalizeCustomerCode(code)||hash(code)!==id)throw new Error();
    return code;
   }catch{throw fail(503,'使用碼解密失敗，請檢查原加密金鑰；不要覆蓋既有資料');}
  }
@@ -49,7 +54,7 @@ export class Billing {
   });
  }
  async lookup(code){
-  if(typeof code!=='string'||!/^ocr_[a-f0-9]{64}$/.test(code))throw fail(401,'使用碼不正確');
+  code=normalizeCustomerCode(code);if(!code)throw fail(401,'使用碼不正確');
   const id=hash(code),doc=await this.store.read(accountPath(id));
   if(!doc.data||doc.data.deletedAt)throw fail(401,'使用碼不正確或已刪除');
   if(!doc.data.sealedCode&&/^[a-f0-9]{64}$/i.test(this.codeKey))await this.saveKnownCode(id,code);
@@ -57,7 +62,7 @@ export class Billing {
  }
  async create({customerRef,name,code,trial=true}){
   if(typeof customerRef!=='string'||!customerRef.trim()||customerRef.length>100||typeof name!=='string'||!name.trim()||name.length>80||typeof trial!=='boolean')throw fail(400,'請填寫客戶名稱及唯一客戶代號');
-  if(!/^ocr_[a-f0-9]{64}$/.test(code||''))throw fail(400,'使用碼必須由安全亂數產生');
+  code=normalizeCustomerCode(code);if(!code)throw fail(400,'使用碼必須由安全亂數產生');
   const id=hash(code),path=accountPath(id),ref='ocrCustomerRefs/'+hash(customerRef.trim().toLowerCase());
   return this.atomic(async()=>{
    const [a,r]=await Promise.all([this.store.read(path),this.store.read(ref)]);

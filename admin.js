@@ -1,6 +1,7 @@
 'use strict';
 const adminEl=id=>document.getElementById(id);
-const randomCode=()=> 'ocr_'+Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
+let shortCodesSupported=false;
+const randomCode=()=>shortCodesSupported?Array.from(crypto.getRandomValues(new Uint8Array(16)),value=>'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[value&31]).join(''):'ocr_'+Array.from(crypto.getRandomValues(new Uint8Array(32)),v=>v.toString(16).padStart(2,'0')).join('');
 let accounts=[],nextCursor='',historyCursor='',historyAccount='',createDraft,creditDraft;
 function message(text){adminEl('adminStatus').textContent=text;}
 async function api(path,body){
@@ -17,6 +18,7 @@ async function api(path,body){
 async function guarded(button,fn){button.disabled=true;try{await fn();}catch(e){message(e.message);}finally{button.disabled=false;}}
 async function load(reset=true){
  const data=await api('/api/admin/accounts'+(!reset&&nextCursor?'?cursor='+encodeURIComponent(nextCursor):''));
+ shortCodesSupported=data.customerCodeFormat==='short16-v1';
  accounts=reset?data.items:accounts.concat(data.items);nextCursor=data.nextCursor;
  const tbody=adminEl('accounts'),select=adminEl('creditAccount'),old=select.value;
  tbody.replaceChildren();select.replaceChildren();

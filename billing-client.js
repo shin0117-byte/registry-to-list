@@ -25,7 +25,8 @@
   if(!enabled){batch=null;return;}
   if(images.some(job=>job.blob.size>7*1024*1024))throw new Error('有圖片超過 7 MB，尚未開始扣點');
   const hashes=await Promise.all(images.map(job=>job.blob.arrayBuffer().then(fingerprint)));
-  const owner=await fingerprint(new TextEncoder().encode(code));
+  const compact=code.replace(/[- ]/g,'').toUpperCase(),identity=/^[A-HJ-NP-Z2-9]{16}$/.test(compact)?compact:code;
+  const owner=await fingerprint(new TextEncoder().encode(identity));
   const signature=await fingerprint(new TextEncoder().encode(JSON.stringify([owner,hashes])));
   const old=batch||saved(),resume=old?.signature===signature;
   const a=await refresh(code);

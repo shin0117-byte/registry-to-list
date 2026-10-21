@@ -1,4 +1,4 @@
-import {Billing} from './billing.mjs';
+import {Billing,normalizeCustomerCode} from './billing.mjs';
 import {FirestoreStore} from './firestore-store.mjs';
 import {readGoogleUsage} from './usage.mjs';
 import {createServer} from 'node:http';
@@ -6,8 +6,8 @@ import {readFile} from 'node:fs/promises';
 import {resolve, extname} from 'node:path';
 import {timingSafeEqual} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-const files=new Set(['index.html','admin.html','admin.js','billing-client.js','app.js','styles.css','cloud-config.js','cloud-ocr.js','land-sections.json','localities.json','roads.json','vendor/pdf.mjs','vendor/pdf.worker.mjs']);
-const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json'};
+const files=new Set(['index.html','admin.html','admin.js','billing-client.js','app.js','registry-model.js','scan-history.js','pdf-export.js','xlsx-export.js','address-recovery.js','styles.css','cloud-config.js','cloud-ocr.js','land-sections.json','localities.json','roads.json','vendor/pdf.mjs','vendor/pdf.worker.mjs','vendor/pdfmake.min.js','vendor/NotoSansCJKtc-Regular.otf','vendor/exceljs.min.js','vendor/tesseract.min.js','vendor/worker.min.js','vendor/tesseract-core.wasm','vendor/tesseract-core.wasm.js','ocr-assets/chi_tra.traineddata.gz','ocr-assets/eng.traineddata.gz']);
+const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.otf':'font/otf','.wasm':'application/wasm','.gz':'application/gzip'};
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 async function readJson(req,limit){
  if(!String(req.headers['content-type']).startsWith('application/json'))throw fail(415,'請傳送 JSON');
@@ -40,7 +40,7 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
   if(req.method==='OPTIONS'){res.writeHead(204,{'Access-Control-Allow-Methods':'GET, POST, OPTIONS','Access-Control-Allow-Headers':'Authorization, Content-Type'});return res.end();}
   try {
    const url=new URL(req.url,'http://localhost'),path=url.pathname;
-   if(path==='/api/health' && req.method==='GET') return json(res,200,{engine:'google-vision',configured:(billingActive?adminCode.length>=32:accessCode.length>=16) && !!project,billingEnabled:!!billingActive,billingAdminReady:!!billing,appRateLimit:null,version:'prepaid-preview-2026-09-16'});
+   if(path==='/api/health' && req.method==='GET') return json(res,200,{engine:'google-vision',configured:(billingActive?adminCode.length>=32:accessCode.length>=16) && !!project,billingEnabled:!!billingActive,billingAdminReady:!!billing,appRateLimit:null,version:'short-codes-2026-10-21',customerCodeFormat:'short16-v1'});
    const bearer=(req.headers.authorization||'').replace(/^Bearer /,'');
    const adminAuth=()=>{
     if(adminCode.length<32)throw fail(503,'管理員密碼尚未設定');
@@ -57,7 +57,7 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
     }
     const supplied=Buffer.from(bearer),expected=Buffer.from(accessCode);
     if(supplied.length===expected.length&&timingSafeEqual(supplied,expected))return json(res,200,{valid:true,billingEnabled:false});
-    if(billing&&/^ocr_[a-f0-9]{64}$/.test(bearer)){
+    if(billing&&normalizeCustomerCode(bearer)){
      await billing.lookup(bearer);
      throw fail(409,'使用碼已確認，但客戶 OCR 模式尚未開放，請聯絡管理員；目前僅接受原共用碼');
     }
@@ -66,7 +66,7 @@ export function createOcrServer({accessCode=process.env.OCR_ACCESS_CODE || '',pr
    if(path.startsWith('/api/admin/')){
     if(!billing)throw fail(503,'計費功能尚未啟用');
     adminAuth();
-    if(path==='/api/admin/accounts'&&req.method==='GET')return json(res,200,await billing.list(url.searchParams.get('cursor')||''));
+    if(path==='/api/admin/accounts'&&req.method==='GET')return json(res,200,{...await billing.list(url.searchParams.get('cursor')||''),customerCodeFormat:'short16-v1'});
     if(path==='/api/admin/history'&&req.method==='GET')return json(res,200,await billing.history(url.searchParams.get('id'),url.searchParams.get('cursor')||''));
     if(req.method!=='POST')throw fail(404,'找不到操作');
     const input=await readJson(req,16384);
