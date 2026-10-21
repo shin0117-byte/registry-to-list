@@ -17,6 +17,7 @@ function definition(snapshot){
   const group=row.commonGroupLabel||row.commonGroup;
   const note=text(row.note)+(group&&!text(row.note).includes(group)?'\n公同共有 '+group:'');
   const cells=[String(index+1),wrap(model.ownerName(row.name)||'（姓名待確認）'),wrap(model.address(row.address)||'—'),wrap(fraction?fraction.numerator+'／'+fraction.denominator:'—'),value,model.displayDate(row.date)||'—',model.reason(row.reason),wrap(note)];
+  for(const column of [3,4])cells[column]={text:cells[column],alignment:'right'};
   for(const column of [5,6])cells[column]={text:cells[column],alignment:'center'};
   for(const [column,key] of [[3,'share'],[4,'share'],[5,'date'],[6,'reason']]){
    const count=spans[key][index];if(count===0)cells[column]={};else if(count>1)cells[column]={...(typeof cells[column]==='object'?cells[column]:{text:cells[column]}),rowSpan:count};
@@ -35,7 +36,7 @@ function definition(snapshot){
  if(summary.groups.length){
   const groupWidth=841.89-48-56-4;
   const groupBody=[['組號','清冊次序','主登記次序','筆數','共同持分','合計坪數','核對'].map(t=>({text:t,fillColor:'#e4efed',alignment:'center'})),
-   ...summary.groups.map(g=>[g.label,wrap(g.rows.join('、')),wrap(g.registrationSequences.join('、')),g.expectedCount?g.memberCount+'／'+g.expectedCount:String(g.memberCount),wrap(g.numerator+'／'+g.denominator),g.area,g.status])];
+   ...summary.groups.map(g=>[g.label,wrap(g.rows.join('、')),wrap(g.registrationSequences.join('、')),g.expectedCount?g.memberCount+'／'+g.expectedCount:String(g.memberCount),{text:wrap(g.numerator+'／'+g.denominator),alignment:'right'},{text:g.area,alignment:'right'},g.status])];
   content.push({table:{headerRows:1,widths:[6,17,24,6,19,9,19].map(n=>groupWidth*n/100),body:groupBody,dontBreakRows:false},layout});
  }else content.push({text:'無公同共有組別。'});
  content.push({text:'逐筆持分合計：'+summary.percent+'%　換算 '+summary.area+' 坪（共同持分每組計一次）。',margin:[0,8,0,0]},

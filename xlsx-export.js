@@ -34,7 +34,7 @@ function build(snapshot,Excel){
   const row=sheet.addRow(values.map(value=>value===''?null:value));style(row);
   row.height=Math.min(409,Math.max(27,...values.map((value,col)=>lines(value,widths[col])*15+8)));
   for(const col of [2,3,4,6,7,8])row.getCell(col).numFmt='@';row.getCell(1).numFmt='0';row.getCell(5).numFmt='#,##0.00';
-  for(const col of [1,4,5,6,7])row.getCell(col).alignment={vertical:'middle',horizontal:'center',wrapText:col!==6};
+  for(const col of [1,4,5,6,7])row.getCell(col).alignment={vertical:'middle',horizontal:[4,5].includes(col)?'right':'center',wrapText:col!==6};
  });
  for(const [col,key] of [[4,'share'],[5,'share'],[6,'date'],[7,'reason']])spans[key].forEach((count,index)=>{if(count>1)sheet.mergeCells(first+index,col,first+index+count-1,col);});
  sheet.addRow([]).height=10;mergedLine('共有組別合計',13,true);
@@ -43,6 +43,7 @@ function build(snapshot,Excel){
   for(const group of summary.groups){
    const values=[group.label,group.rows.join('、 '),group.registrationSequences.join('、 '),group.expectedCount?group.memberCount+'／'+group.expectedCount:group.memberCount,group.numerator+'／'+group.denominator,group.area==='—'?'—':Number(group.area),group.status,''];
    const r=sheet.addRow(values);style(r);sheet.mergeCells(r.number,7,r.number,8);r.getCell(6).numFmt='#,##0.00';
+   for(const col of [5,6])r.getCell(col).alignment={vertical:'top',horizontal:'right',wrapText:true};
    r.height=Math.min(409,Math.max(30,...values.slice(0,7).map((v,i)=>lines(v,i===6?widths[6]+widths[7]:widths[i])*15+8)));
   }
  }else mergedLine('無公同共有組別。');
