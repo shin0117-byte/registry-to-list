@@ -83,7 +83,12 @@ test('unlabelled inheritance warning and labelled restriction remain in business
 });
 
 
-test('debtor full name has no gender title appended, including after editing other fields',()=>{
- const c=parser();assert.equal(c.formatOwnerName('張完整','A123456789','張完整'),'張完整');
+test('debtor full name receives the ID gender title while preserving full name',()=>{
+ const c=parser();
+ assert.equal(c.formatOwnerName('張完整','A123456789'),'張完整先生');
+ assert.equal(c.formatOwnerName('張完整','A223456789'),'張完整小姐');
+ assert.equal(c.formatOwnerName('張完整','A2********'),'張完整小姐');
+ assert.equal(c.formatOwnerName('張完整',''),'張完整');
+ assert.equal(c.formatOwnerName('張完整先生','A123456789'),'張完整先生');
  assert.equal(c.formatOwnerName('李＊＊','A123456789'),'李先生');
 });

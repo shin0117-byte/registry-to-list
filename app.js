@@ -18,7 +18,7 @@ function addRow(data = [], metadata = {}) {
   const issues=[...(metadata.issues || [])];
   if(date && !RegistryModel.date(date))issues.push('原因發生日期無法確認：'+date);
   date=RegistryModel.displayDate(date);reason=RegistryModel.reason(reason);address=RegistryModel.address(address);
-  Object.entries({name: formatOwnerName(name, id, metadata.debtorName), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
+  Object.entries({name: formatOwnerName(name, id), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
   tr.dataset.commonGroup = metadata.commonGroup || '';
@@ -85,9 +85,8 @@ function genderFromId(id) {
   if (normalized.length !== 10 || !/^[A-Z][12]/.test(normalized)) return '—';
   return normalized[1] === '1' ? '男' : '女';
 }
-function formatOwnerName(name = '', id = '', fullName = '') {
+function formatOwnerName(name = '', id = '') {
   const value = String(name).trim(); const gender = genderFromId(String(id || ''));
-  if (fullName) return value;
   if (!value || gender === '—' || /(先生|小姐)$/.test(value)) return value;
   const title = gender === '男' ? '先生' : '小姐';
   return /[＊*]+/.test(value) ? value.replace(/[＊*]+/g, title) : `${value}${title}`;
@@ -112,7 +111,7 @@ function updateRow(event) {
   }
   const tr = event.currentTarget; const id = tr.querySelector('[data-key="id"]').value;
   tr.querySelector('.gender').textContent = genderFromId(id);
-  const name = tr.querySelector('[data-key="name"]'); name.value = formatOwnerName(name.value, id, tr.dataset.debtorName);
+  const name = tr.querySelector('[data-key="name"]'); name.value = formatOwnerName(name.value, id);
   updateAll();
 }
 function updateAll() {
