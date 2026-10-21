@@ -59,7 +59,7 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
 [hidden]{display:none!important}
 /* A3 portrait: preserve every owner row; common shares are totaled separately. */
 .owner-table{width:100%;min-width:800px;table-layout:fixed}
-.owner-table .col-serial{width:4%}.owner-table .col-name{width:8%}.owner-table .col-gender{width:5%}.owner-table .col-address{width:24%}.owner-table .col-numerator{width:7%}.owner-table .col-slash{width:2%}.owner-table .col-denominator{width:9%}.owner-table .col-share{width:7%}.owner-table .col-date{width:10%}.owner-table .col-reason{width:7%}.owner-table .col-note{width:13%}.owner-table .col-action{width:4%}
+.owner-table .col-serial{width:4%}.owner-table .col-name{width:8%}.owner-table .col-gender{width:5%}.owner-table .col-address{width:26%}.owner-table .col-numerator{width:7%}.owner-table .col-slash{width:2%}.owner-table .col-denominator{width:9%}.owner-table .col-share{width:7%}.owner-table .col-date{width:8%}.owner-table .col-reason{width:7%}.owner-table .col-note{width:13%}.owner-table .col-action{width:4%}
 .owner-table td input,.owner-table td textarea,.owner-table td input[data-key="name"]{width:100%;min-width:0;max-width:100%;overflow-wrap:anywhere;white-space:pre-wrap}
 .owner-table textarea{resize:vertical}.owner-table th{white-space:normal;overflow-wrap:anywhere}.owner-table .common-group-input{font-size:10px}
 .group-table{table-layout:fixed;width:100%;min-width:0;font-size:12px}.group-table th,.group-table td{white-space:normal;overflow-wrap:anywhere;vertical-align:top;padding:7px;border:1px solid var(--line)}
@@ -72,7 +72,7 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
  .owner-table th,.owner-table td{white-space:normal!important;overflow-wrap:anywhere!important;padding:3px!important}
  .owner-table td textarea{height:auto!important;overflow:visible!important;max-height:none!important}
  .owner-table td:nth-child(3),.owner-table th:nth-child(3),.owner-table td:last-child,.owner-table th:last-child,.common-group-input,.row-movement{display:none!important}
- .owner-table .col-serial{width:4%}.owner-table .col-name{width:9%}.owner-table .col-gender,.owner-table .col-action{width:0}.owner-table .col-address{width:24%}.owner-table .col-numerator{width:6%}.owner-table .col-slash{width:2%}.owner-table .col-denominator{width:8%}.owner-table .col-share{width:8%}.owner-table .col-date{width:12%}.owner-table .col-reason{width:8%}.owner-table .col-note{width:19%}
+ .owner-table .col-serial{width:4%}.owner-table .col-name{width:9%}.owner-table .col-gender,.owner-table .col-action{width:0}.owner-table .col-address{width:24%}.owner-table .col-numerator{width:6%}.owner-table .col-slash{width:2%}.owner-table .col-denominator{width:8%}.owner-table .col-share{width:8%}.owner-table .col-date{width:8%}.owner-table .col-reason{width:8%}.owner-table .col-note{width:23%}
  thead{display:table-header-group}tr{break-inside:avoid}.registry-summary{display:block!important;border:0;box-shadow:none;padding:10mm 0 0}.registry-summary details{display:block}.registry-summary .hint{display:block}
  .recent-scans{display:none!important}
 }
@@ -89,3 +89,12 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
 @media print{#registryPrintSheet th,#registryPrintSheet td{width:auto!important}}
 .owner-table .row-movement{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}
 .owner-table .row-movement button{min-width:0;padding:2px 0;font-size:9px;line-height:1.2}
+
+/* Dates use nine fixed characters; the header identifies the ROC calendar. */
+.owner-table [data-key="date"]{font-size:11px;letter-spacing:-.15px;font-variant-numeric:tabular-nums;white-space:nowrap;padding:4px 1px}
+.owner-table td[rowspan]{vertical-align:middle}
+@media print{#registryPrintSheet .date-cell{white-space:nowrap}}
+
+.owner-table .date-heading{font-size:10px;word-break:keep-all;overflow-wrap:normal}
+
+@media print{#registryPrintSheet .date-heading{font-size:8pt}}

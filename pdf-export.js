@@ -7,15 +7,20 @@ function definition(snapshot){
  const f=snapshot.fields,items=snapshot.rows,area=Number(f.area)||0,model=root.RegistryModel;
  const summary=model.summary(items,area),title=[f.district,f.section,f.parcel].map(text).join('')+'地號清冊';
  const available=841.89-48-64-4.5;
- const percentages=[4,9,24,14,8,12,8,21];
+ const percentages=model.ownerColumnPercentages;
  const widths=percentages.map(n=>available*n/100);
- const headers=['次序','姓名','地址','持分','持分坪數','原因發生日期','登記原因','備註／組號'];
- const body=[headers.map(value=>({text:value,fillColor:'#e4efed',bold:true}))];
+ const headers=['次序','姓名','地址','持分','持分坪數','原因發生日期\n（民國）','登記原因','備註／組號'];
+ const body=[headers.map((value,index)=>({text:value,fillColor:'#e4efed',bold:true,...(index===5?{fontSize:9}:{})}))];
+ const spans=model.commonCellSpans(items);
  items.forEach((row,index)=>{
   const fraction=model.fraction(row),value=fraction?(area*Number(fraction.numerator)/Number(fraction.denominator)*.3025).toFixed(2):'—';
   const group=row.commonGroupLabel||row.commonGroup;
   const note=text(row.note)+(group&&!text(row.note).includes(group)?'\n公同共有 '+group:'');
-  body.push([String(index+1),wrap(row.name||'（姓名待確認）'),wrap(model.address(row.address)||'—'),wrap(fraction?fraction.numerator+'／'+fraction.denominator:'—'),value,model.date(row.date)||'—',model.reason(row.reason),wrap(note)]);
+  const cells=[String(index+1),wrap(model.ownerName(row.name)||'（姓名待確認）'),wrap(model.address(row.address)||'—'),wrap(fraction?fraction.numerator+'／'+fraction.denominator:'—'),value,model.displayDate(row.date)||'—',model.reason(row.reason),wrap(note)];
+  for(const [column,key] of [[3,'share'],[4,'share'],[5,'date'],[6,'reason']]){
+   const count=spans[key][index];if(count===0)cells[column]={};else if(count>1)cells[column]={text:cells[column],rowSpan:count};
+  }
+  body.push(cells);
  });
  const content=[
   {text:title,fontSize:16,bold:true,margin:[0,0,0,8]},

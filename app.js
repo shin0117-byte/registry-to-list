@@ -15,7 +15,7 @@ function addRow(data = [], metadata = {}) {
   const checked = validateOwnerIdentity({name,id}); name=checked.name; id=checked.id;
   const issues=[...(metadata.issues || [])];
   if(date && !RegistryModel.date(date))issues.push('原因發生日期無法確認：'+date);
-  date=RegistryModel.date(date);reason=RegistryModel.reason(reason);address=RegistryModel.address(address);
+  date=RegistryModel.displayDate(date);reason=RegistryModel.reason(reason);address=RegistryModel.address(address);
   Object.entries({name: formatOwnerName(name, id), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
@@ -36,6 +36,16 @@ function addRow(data = [], metadata = {}) {
   groupField.addEventListener('input', () => { tr.dataset.commonGroup = groupField.value.trim();tr.dataset.commonGroupLabel=groupField.value.trim(); });
   tr.querySelector('[data-key="note"]').parentElement.append(groupField);
   tr.addEventListener('input', updateRow);
+  tr.addEventListener('focusin',event=>{
+    if(['date','reason'].includes(event.target.dataset?.key))delete event.target._mergedTargets;
+  });
+  tr.addEventListener('focusout',event=>{delete event.target._mergedTargets;});
+  tr.addEventListener('change',event=>{
+    if(event.target.dataset?.key==='date'){
+      const value=RegistryModel.displayDate(event.target.value);
+      if(value){for(const member of event.target._mergedTargets||[tr])member.querySelector('[data-key="date"]').value=value;autoGrowField(event.target);updateAll();}
+    }
+  });
 
   tr.querySelector('.delete-row').addEventListener('click', () => { tr.remove(); updateAll(); });
   setupRowMovement(tr);
@@ -81,12 +91,19 @@ function formatOwnerName(name = '', id = '') {
 }
 function autoGrowField(field) { if (field?.tagName === 'TEXTAREA') { field.style.height = 'auto'; field.style.height = Math.max(30, field.scrollHeight) + 'px'; } }
 function updateRow(event) {
-  if(event.target.dataset?.key==='date'){const normalized=RegistryModel.date(event.target.value);if(normalized){event.target.value=normalized;const issues=JSON.parse(event.currentTarget.dataset.issues||'[]').filter(x=>!x.startsWith('原因發生日期'));event.currentTarget.dataset.issues=JSON.stringify(issues);}}
+  const key=event.target.dataset?.key,cell=event.target.closest('td');
+  // Editing a merged date/reason edits precisely the rows represented by that cell.
+  const current=[...rows.children],start=current.indexOf(event.currentTarget);
+  const targets=['date','reason'].includes(key)?(event.target._mergedTargets ||= current.slice(start,start+Number(cell?.dataset.mergeCount||1))):[];
+  if(['date','reason'].includes(key))for(const member of targets){
+    member.querySelector('[data-key="'+key+'"]').value=event.target.value;
+    if(key==='date'&&RegistryModel.date(event.target.value))member.dataset.issues=JSON.stringify(JSON.parse(member.dataset.issues||'[]').filter(x=>!x.startsWith('原因發生日期')));
+  }
   autoGrowField(event.target);
   const sharedKey = event.target.dataset?.key;
   const group = event.currentTarget.dataset.commonGroup;
   if (group && ['numerator','denominator'].includes(sharedKey)) {
-    for (const member of rows.children) if (member.dataset.commonGroup === group) {
+    for (const member of rows.children) if (member.dataset.commonGroup === group && member.dataset.documentKey === event.currentTarget.dataset.documentKey) {
       member.querySelector('[data-key="' + sharedKey + '"]').value = event.target.value;
     }
   }
@@ -124,14 +141,25 @@ function getData() {
     ocrImported:tr.dataset.ocrImported === 'true'
   }));
 }
-function commonSpans(items) { return items.map(()=>1); }
+function commonSpans(items) { return RegistryModel.commonCellSpans(items).share; }
 function mergeCommonCells() {
-  for(const tr of rows.children)for(const index of [4,5,6,7]) { const cell=tr.children[index];cell.rowSpan=1;cell.style.display='';cell.classList.toggle('common-share',Boolean(tr.dataset.commonGroup)); }
+ const list=[...rows.children],spans=RegistryModel.commonCellSpans(getData());
+ for(const [index,key] of [[4,'share'],[5,'share'],[6,'share'],[7,'share'],[8,'date'],[9,'reason']]){
+  list.forEach((tr,i)=>{
+   const cell=tr.children[index],count=spans[key][i];cell.rowSpan=Math.max(1,count);cell.style.display=count===0?'none':'';
+   cell.dataset.mergeCount=Math.max(1,count);cell.classList.toggle('common-share',Boolean(tr.dataset.commonGroup));
+  });
+ }
 }
 function buildExportRows(items,area) {
+ const spans=RegistryModel.commonCellSpans(items);
  return items.map((row,index)=>{
   const f=validShare(row),value=f?(area*Number(f.numerator)/Number(f.denominator)*.3025).toFixed(2):'—';
-  return '<tr>'+[index+1,row.name||'（姓名待確認）',row.address||'—',f?f.numerator+'／'+f.denominator:'—',value,RegistryModel.date(row.date),RegistryModel.reason(row.reason),row.note].map(value=>'<td>'+escapeXml(value)+'</td>').join('')+'</tr>';
+  const group=row.commonGroupLabel||row.commonGroup,note=(row.note||'')+(group&&!(row.note||'').includes(group)?'\n公同共有 '+group:'');
+  return '<tr>'+[index+1,RegistryModel.ownerName(row.name)||'（姓名待確認）',row.address||'—',f?f.numerator+'／'+f.denominator:'—',value,RegistryModel.displayDate(row.date),RegistryModel.reason(row.reason),note].map((value,column)=>{
+   const key=({3:'share',4:'share',5:'date',6:'reason'})[column],count=key?spans[key][index]:1;
+   return count===0?'':'<td'+(count>1?' rowspan="'+count+'"':'')+(column===5?' class="date-cell"':'')+'>'+escapeXml(value)+'</td>';
+  }).join('')+'</tr>';
  }).join('');
 }
 function summaryHtml(summary) {
@@ -144,8 +172,8 @@ function summaryHtml(summary) {
 function renderRegistrySummary(summary) { const node=$('#registrySummary');if(node)node.innerHTML=summaryHtml(summary); }
 function printableHtml() {
  const title=[$('#district').value,$('#section').value,$('#parcel').value].join('')+'地號清冊',items=getData(),area=Number($('#area').value)||0;
- const headers=['次序','姓名','地址','持分','持分坪數','原因發生日期','登記原因','備註／組號'];
- return '<h1>'+escapeXml(title)+'</h1><p>土地總面積：'+area+' m²（'+(area*.3025).toFixed(2)+' 坪）　'+escapeXml(landValueLabel())+escapeXml($('#value').value)+' 元／m²</p><p>依原謄本排序；相同組號為同一公同共有關係，持分另列組別合計。</p><table class="print-owner-table"><colgroup>'+[4,9,24,14,8,12,8,21].map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+headers.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+buildExportRows(items,area)+'</tbody></table><h2>共有組別合計與核對</h2>'+summaryHtml(RegistryModel.summary(items,area));
+ const headers=['次序','姓名','地址','持分','持分坪數','原因發生日期<br>（民國）','登記原因','備註／組號'];
+ return '<h1>'+escapeXml(title)+'</h1><p>土地總面積：'+area+' m²（'+(area*.3025).toFixed(2)+' 坪）　'+escapeXml(landValueLabel())+escapeXml($('#value').value)+' 元／m²</p><p>依原謄本排序；相同組號為同一公同共有關係，持分另列組別合計。</p><table class="print-owner-table"><colgroup>'+RegistryModel.ownerColumnPercentages.map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+headers.map((x,i)=>'<th'+(i===5?' class="date-heading"':'')+'>'+x+'</th>').join('')+'</tr></thead><tbody>'+buildExportRows(items,area)+'</tbody></table><h2>共有組別合計與核對</h2>'+summaryHtml(RegistryModel.summary(items,area));
 }
 function preparePrintView() {
  document.querySelector('#registryPrintSheet')?.remove();
@@ -160,9 +188,9 @@ function restoreDraft() { try { const d=JSON.parse(localStorage.getItem('registr
 function escapeXml(value='') { return String(value).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
 function exportExcel() {
  const title=`${$('#district').value}${$('#section').value}${$('#parcel').value}地號清冊`,items=getData(),area=Number($('#area').value)||0;
- const summary=RegistryModel.summary(items,area),headers=['次序','姓名','地址','持分','持分坪數','原因發生日期','登記原因','備註／組號'];
+ const summary=RegistryModel.summary(items,area),headers=['次序','姓名','地址','持分','持分坪數','原因發生日期<br>（民國）','登記原因','備註／組號'];
  const options='<xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>清冊</x:Name><x:WorksheetOptions><x:PageSetup><x:Layout x:Orientation="Portrait"/></x:PageSetup><x:FitToPage/><x:Print><x:PaperSizeIndex>8</x:PaperSizeIndex><x:FitWidth>1</x:FitWidth><x:FitHeight>0</x:FitHeight></x:Print></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml>';
- const html='<!doctype html><html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]>'+options+'<![endif]--><style>@page{size:A3 portrait;margin:10mm}body{font-family:"Microsoft JhengHei";font-size:10pt}table{border-collapse:collapse;table-layout:fixed;width:100%}td,th{border:1px solid #999;padding:5px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-wrap:break-word}th{background:#e4efed}h1{font-size:16pt}thead{display:table-header-group}</style></head><body><h1>'+escapeXml(title)+'</h1><p>土地總面積：'+area+' m²（'+summary.landArea+' 坪）　'+escapeXml(landValueLabel())+escapeXml($('#value').value)+' 元／m²</p><p>依原謄本排序；同組共同持分另列合計，每組計一次。</p><table><colgroup>'+[4,9,24,14,8,12,8,21].map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+headers.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+buildExportRows(items,area)+'</tbody></table><h2>共有組別合計與核對</h2>'+summaryHtml(summary)+'</body></html>';
+ const html='<!doctype html><html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"><!--[if gte mso 9]>'+options+'<![endif]--><style>@page{size:A3 portrait;margin:10mm}body{font-family:"Microsoft JhengHei";font-size:10pt}table{border-collapse:collapse;table-layout:fixed;width:100%}td,th{border:1px solid #999;padding:5px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-wrap:break-word}th{background:#e4efed}h1{font-size:16pt}thead{display:table-header-group}.date-heading{font-size:8pt}.date-cell{white-space:nowrap;font-variant-numeric:tabular-nums;mso-number-format:"\\@"}</style></head><body><h1>'+escapeXml(title)+'</h1><p>土地總面積：'+area+' m²（'+summary.landArea+' 坪）　'+escapeXml(landValueLabel())+escapeXml($('#value').value)+' 元／m²</p><p>依原謄本排序；同組共同持分另列合計，每組計一次。</p><table><colgroup>'+RegistryModel.ownerColumnPercentages.map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+headers.map((x,i)=>'<th'+(i===5?' class="date-heading"':'')+'>'+x+'</th>').join('')+'</tr></thead><tbody>'+buildExportRows(items,area)+'</tbody></table><h2>共有組別合計與核對</h2>'+summaryHtml(summary)+'</body></html>';
  const blob=new Blob(['\ufeff',html],{type:'application/vnd.ms-excel;charset=utf-8'}),link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=title+'.xls';link.click();URL.revokeObjectURL(link.href);toast('已匯出 A3 直式 Excel 相容清冊');
 }
 async function exportPdf() {
@@ -358,7 +386,7 @@ function reconcileLandFields(directText, ocrText) {
   return {fields,review};
 }
 function validateOwnerIdentity(owner) {
-  let name=String(owner.name || '').trim(),id=String(owner.id || '').replace(/\s/g,'');
+  let name=RegistryModel.ownerName(owner.name),id=String(owner.id || '').replace(/\s/g,'');
   if (id && id.length!==10) id='';
   if (/[0-9０-９]+$/.test(name)) name=name.replace(/[0-9０-９]+$/,'').trim();
   return {...owner,name,id,review:[...(owner.review || [])]};

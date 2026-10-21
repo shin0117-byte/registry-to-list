@@ -15,8 +15,8 @@ test('PDF uses A3 portrait, wraps content and preserves all owner cells',()=>{
  assert.ok(table.widths.reduce((a,b)=>a+b,0)+64+4.5<=841.89-48+.001);
  assert.equal(table.body.length,3);
  assert.equal(table.body[1].length,8);assert.equal(table.body[2].length,8);
- assert.equal(typeof table.body[2][3],'string');
- assert.ok(table.body[1][3].includes('\n'));
+ assert.equal(table.body[1][3].rowSpan,2);assert.equal(Object.keys(table.body[2][3]).length,0);
+ assert.ok(table.body[1][3].text.includes('\n'));
  assert.ok(doc.content.some(item=>item.text==='共有組別合計'));
  assert.match(JSON.stringify(doc),/使用地類別/);
 });
@@ -24,4 +24,17 @@ test('PDF UI downloads a file without print window',async()=>{
  const source=await readFile(new URL('../app.js',import.meta.url),'utf8');
  const fn=source.slice(source.indexOf('async function exportPdf'),source.indexOf('function captureSnapshot'));
  assert.match(fn,/RegistryPdf.download/);assert.doesNotMatch(fn,/window.open|document.write|window.print/);
+});
+test('PDF compacts ROC dates and merges only identical adjacent group fields',()=>{
+ const rows=[
+  {name:'甲',commonGroup:'g',numerator:'1',denominator:'2',date:'民國114.03.07',reason:'繼承'},
+  {name:'乙',commonGroup:'g',numerator:'1',denominator:'2',date:'民國114.03.08',reason:'繼承'},
+  {name:'丙',commonGroup:'g',numerator:'1',denominator:'2',date:'民國114.03.08',reason:'買賣'}
+ ];
+ const t=context.RegistryPdf.definition({fields:{area:100},rows}).content.find(x=>x.table).table;
+ assert.equal(t.body[1][3].rowSpan,3);assert.equal(t.body[1][4].rowSpan,3);
+ assert.equal(t.body[1][5],'114.03.07');assert.equal(t.body[2][5].rowSpan,2);
+ assert.equal(t.body[1][6].rowSpan,2);assert.equal(t.body[3][6],'買賣');
+ assert.equal(t.body[0][5].text,'原因發生日期\n（民國）');
+ assert.ok(t.widths[5]<59);
 });

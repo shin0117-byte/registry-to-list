@@ -63,3 +63,24 @@ test('truncated address is flagged without guessing a missing house-number suffi
  const s=M.summary([{name:'測試甲',address:'測試市中山路335',numerator:'1',denominator:'1'}],100);
  assert.ok(s.issues.some(x=>x.includes('門牌結尾')));assert.equal(M.address('測試市中山路335'),'測試市中山路335');
 });
+
+test('name stamp removal preserves names and actual government-agency owners',()=>{
+ assert.equal(M.ownerName('葉先生屏東縣\n枋寮地政事務所'),'葉先生');
+ assert.equal(M.ownerName('李小姐屏東縣枋寮地政事務所'),'李小姐');
+ assert.equal(M.ownerName('王＊＊屏東縣枋寮地政事務所'),'王＊＊');
+ assert.equal(M.ownerName('王測試屏東縣枋寮地政事務所'),'王測試');
+ assert.equal(M.ownerName('屏東縣枋寮地政事務所'),'屏東縣枋寮地政事務所');
+ assert.equal(M.ownerName('屏東縣政府'),'屏東縣政府');
+ assert.equal(M.parseOwners(row(1,'0001','王＊＊屏東縣枋寮地政事務所'))[0].name,'王＊＊');
+});
+test('field spans respect differing values, blank/invalid fields, document and group boundaries',()=>{
+ const a={commonGroup:'g',documentKey:'a',numerator:'1',denominator:'2',date:'民國114.03.07',reason:'繼承'};
+ const items=[a,{...a,date:'114.03.08'},{...a,date:'114.03.08',reason:'買賣'},{...a,commonGroup:''},a,{...a,documentKey:'b'}];
+ const spans=M.commonCellSpans(items);
+ assert.deepEqual(Array.from(spans.share),[3,0,0,1,1,1]);
+ assert.deepEqual(Array.from(spans.date),[1,2,0,1,1,1]);
+ assert.deepEqual(Array.from(spans.reason),[2,0,1,1,1,1]);
+ const invalid={...a,date:'亂碼',reason:'',denominator:'06'};
+ for(const value of Object.values(M.commonCellSpans([invalid,invalid])))assert.deepEqual(Array.from(value),[1,1]);
+ assert.equal(M.displayDate('民國056年07月06日'),'056.07.06');assert.equal(M.displayDate('非日期'),'');
+});

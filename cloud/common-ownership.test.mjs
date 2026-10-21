@@ -16,7 +16,8 @@ function setup() {
 const owner = (name, extra={}) => ({name,id:'A123****89',address:name+'的完整住址',numerator:1,denominator:3,date:'110.01.01',reason:'繼承',note:'',common:true,...extra});
 function mockRow(data) {
  const fields = Object.fromEntries(Object.entries(data).map(([key,value])=>[key,{value:String(value),dataset:{key}}]));
- const cells=Array.from({length:12},()=>({style:{},classList:{toggle(){}},rowSpan:1}));
+ const cells=Array.from({length:12},()=>({style:{},dataset:{},classList:{toggle(){}},rowSpan:1}));
+ for(const [key,field] of Object.entries(fields))field.closest=()=>cells[({numerator:4,denominator:6,date:8,reason:9})[key]??1];
  const misc={};
  return {dataset:{commonGroup:data.commonGroup||'',sequence:'1',ocrImported:'true'},children:cells,
  querySelector(s){const key=s.match(/data-key="([^"]+)"/)?.[1];return key?fields[key]:(misc[s]||= {});}};
@@ -37,12 +38,12 @@ test('different group, share or registration event cannot be silently merged',()
  assert.equal(new Set(output.map(r=>r.commonGroup)).size,3);
  assert.deepEqual(Array.from(c.commonSpans([owner('甲',{commonGroup:'g'}),owner('乙',{commonGroup:'g',denominator:5})])),[1,1]);
 });
-test('screen keeps all cells and original order; shared fraction edits update the same group',()=>{
+test('screen merges equal adjacent fields while keeping every owner and address',()=>{
  const {context:c,rows}=setup();
  rows.children=c.groupCommonOwnership([owner('甲',{commonGroup:'g'}),owner('乙',{commonGroup:'g'})]).map(mockRow);
  c.updateAll();
- assert.equal(rows.children[0].children[4].rowSpan,1);
- assert.deepEqual(rows.children[1].children.map((cell,i)=>cell.style.display==='none'?i:null).filter(i=>i!==null),[]);
+ assert.equal(rows.children[0].children[4].rowSpan,2);
+ assert.deepEqual(rows.children[1].children.map((cell,i)=>cell.style.display==='none'?i:null).filter(i=>i!==null),[4,5,6,7,8,9]);
  const target=rows.children[0].querySelector('[data-key="numerator"]');
  target.value='2';
  c.updateRow({currentTarget:rows.children[0],target});
@@ -54,7 +55,7 @@ test('screen keeps all cells and original order; shared fraction edits update th
 });
 test('PDF and Excel retain eight columns on every original owner row',()=>{
  const {context:c}=setup();
- const items=c.groupCommonOwnership([owner('甲'),owner('乙'),owner('丙',{common:false}),owner('丁'),owner('戊')]);
+ const items=c.groupCommonOwnership([owner('甲',{commonGroup:'g'}),owner('乙',{commonGroup:'g'}),owner('丙',{common:false}),owner('丁',{commonGroup:'g'}),owner('戊',{commonGroup:'g'})]);
  const html=c.buildExportRows(items,100);
  const trs=[...html.matchAll(/<tr>(.*?)<\/tr>/gs)];
  assert.equal(trs.length,5);
@@ -65,7 +66,7 @@ test('PDF and Excel retain eight columns on every original owner row',()=>{
    while(occupied[col]>0)col++;
    assert.ok(col<8,'unexpected overlapping/extra cell');
    const span=Number(cell[1].match(/rowspan="(\d+)"/)?.[1]||1);
-   if(span>1) assert.ok(col===3||col===4,'only share and area may span');
+   if(span>1) assert.ok([3,4,5,6].includes(col),'only requested shared fields may span');
    occupied[col]=span;col++;
   }
   assert.ok(occupied.every(v=>v>0),'missing column at row '+rowIndex);
@@ -98,10 +99,34 @@ test('moving inserted owners preserves data, renumbers and recomputes shared cel
  assert.deepEqual(rows.children.map(r=>r.querySelector('.serial').textContent),[1,2,3]);
  assert.equal(rows.children[0].children[4].rowSpan,1);
  assert.equal(c.moveOwnerRow(added,3),true);
- assert.equal(rows.children[0].children[4].rowSpan,1);
+ assert.equal(rows.children[0].children[4].rowSpan,2);
  assert.equal(c.moveOwnerRow(added,0),false);assert.equal(c.moveOwnerRow(added,4),false);
  assert.equal(c.moveOwnerRow(added,1),true);
  assert.equal(c.getData()[0].name,'補入');
  const html=c.buildExportRows(c.getData(),100);
  assert.ok(html.indexOf('補入')<html.indexOf('甲'));
+});
+test('editing merged date/reason updates its contiguous members only',()=>{
+ const {context:c,rows}=setup();
+ rows.children=[owner('甲',{commonGroup:'g'}),owner('乙',{commonGroup:'g'}),owner('丙'),owner('丁',{commonGroup:'g'})].map(mockRow);
+ c.updateAll();
+ for(const [key,value] of [['date','114.03.07'],['reason','買賣']]){
+  const target=rows.children[0].querySelector('[data-key="'+key+'"]');target.value=value;
+  c.updateRow({currentTarget:rows.children[0],target});
+  assert.equal(c.getData()[1][key],value);assert.notEqual(c.getData()[3][key],value);
+ }
+ const html=c.buildExportRows(c.getData(),100);
+ assert.match(html,/rowspan="2" class="date-cell">114.03.07/);
+ assert.doesNotMatch(html,/民國114/);
+});
+
+test('typing an incomplete date does not detach the rest of a merged cell',()=>{
+ const {context:c,rows}=setup();
+ rows.children=[owner('甲',{commonGroup:'g'}),owner('乙',{commonGroup:'g'})].map(mockRow);c.updateAll();
+ const target=rows.children[0].querySelector('[data-key="date"]');
+ for(const value of ['','1','114.03.07']){
+  target.value=value;c.updateRow({currentTarget:rows.children[0],target});
+  assert.equal(c.getData()[1].date,value);
+ }
+ assert.equal(rows.children[0].children[8].rowSpan,2);
 });

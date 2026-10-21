@@ -90,7 +90,7 @@ function parseOwners(text,notes=()=>[]){
   const share=field(block,'權利範圍').replace(/\s/g,'').replace(new RegExp('['+noise+']','g'),'');
   const cn=share.match(/(\d+)分之(\d+)/),slash=share.match(/(\d+)\/(\d+)/);
   const f=fraction({numerator:cn?.[2]||slash?.[1]||'',denominator:cn?.[1]||slash?.[2]||''});
-  const name=field(block,'所有權人').replace(/\s/g,'').replace(/(?:[＊*]{3,}|[A-Z0-9]{2})$/,'').trim();
+  const name=ownerName(field(block,'所有權人')).replace(/(?:[＊*]{3,}|[A-Z0-9]{2})$/,'').trim();
   const id=field(block,'統一編號').replace(/\s/g,'');
   const rawDate=field(block,'原因發生日期'),rawAddress=field(block,'住址');
   const managerPart=block.includes('管理者：')?block.slice(block.indexOf('管理者：')):'';
@@ -167,5 +167,28 @@ function summary(items,landArea){
  const complete=sharesComplete&&recordsComplete&&!issues.length;
  return {groups:output,issues:[...new Set(issues)],ratio,percent:(ratio*100).toFixed(4),area:(Number(landArea||0)*ratio*.3025).toFixed(2),landArea:(Number(landArea||0)*.3025).toFixed(2),complete,balanced:sharesComplete&&recordsComplete&&n===d,totalFraction:n+'/'+d,recordCount:items.length,managers:items.map((row,index)=>({row:index+1,owner:row.name||'姓名待確認',name:row.manager||'',address:row.managerAddress||'—'})).filter(row=>row.name)};
 }
-root.RegistryModel={digits,clean,repairLabels,date,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
+function ownerName(value){
+ let name=str(value).replace(/\s/g,'');
+ const office='屏東縣枋寮地政事務所';
+ // Keep a government agency when it is the actual owner; remove a stamp attached to a name.
+ if(name!==office)name=name.split(office).join('');
+ return name.replace(/((?:先生|小姐|[＊*]+))(?:屏東縣|枋寮地政事務所)+$/,'$1');
+}
+function displayDate(value){return date(value).replace(/^民國/,'');}
+// Merge fields independently, only within an uninterrupted common-owner group.
+function commonCellSpans(items){
+ const result={share:items.map(()=>1),date:items.map(()=>1),reason:items.map(()=>1)};
+ const group=row=>row.commonGroup?JSON.stringify([row.documentKey||'',row.commonGroup]):'';
+ const values={share:row=>{const f=fraction(row);return f?f.numerator+'/'+f.denominator:'';},date:row=>date(row.date),reason:row=>reason(row.reason)};
+ for(const [key,value] of Object.entries(values)){
+  for(let i=0;i<items.length;){
+   const id=group(items[i]),v=value(items[i]);let end=i+1;
+   if(id&&v)while(end<items.length&&group(items[end])===id&&value(items[end])===v)end++;
+   result[key][i]=end-i;for(let j=i+1;j<end;j++)result[key][j]=0;i=end;
+  }
+ }
+ return result;
+}
+const ownerColumnPercentages=[4,9,26,14,8,8,8,23];
+root.RegistryModel={digits,clean,repairLabels,date,displayDate,ownerName,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
 })(globalThis);
