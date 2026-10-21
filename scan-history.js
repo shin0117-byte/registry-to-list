@@ -2,7 +2,7 @@
  'use strict';
  const key='registry-scan-history-v1',currentKey='registry-draft';
  const fields=['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'];
- const rowKeys=['name','id','address','numerator','denominator','date','reason','note','commonGroup','sequence','registrationSequence','documentKey','sourceOrder','sourceRecordCount','commonGroupLabel','manager','managerAddress'];
+ const rowKeys=['name','id','address','numerator','denominator','date','reason','note','commonGroup','sequence','registrationSequence','documentKey','sourceOrder','sourceRecordCount','commonGroupLabel','manager','managerAddress','debtorName'];
  function sanitize(snapshot){
   if(!snapshot||!snapshot.fields||!Array.isArray(snapshot.rows))throw new Error('清冊紀錄格式錯誤');
   return {schemaVersion:snapshot.schemaVersion===2?2:undefined,needsSourceRebuild:snapshot.needsSourceRebuild===true,sourceFiles:Array.isArray(snapshot.sourceFiles)?snapshot.sourceFiles.map(String):[],fields:Object.fromEntries(fields.map(k=>[k,String(snapshot.fields[k]??'')])),

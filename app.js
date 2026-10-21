@@ -12,17 +12,19 @@ function addRow(data = [], metadata = {}) {
   const fragment = $('#rowTemplate').content.cloneNode(true);
   const tr = fragment.querySelector('tr');
   let [name, id, address, numerator, denominator, date, reason, note] = data;
+  const fullName=metadata.debtorName||RegistryModel.debtorName(note);
+  if(fullName){name=fullName;metadata={...metadata,debtorName:fullName};}
   const checked = validateOwnerIdentity({name,id}); name=checked.name; id=checked.id;
   const issues=[...(metadata.issues || [])];
   if(date && !RegistryModel.date(date))issues.push('原因發生日期無法確認：'+date);
   date=RegistryModel.displayDate(date);reason=RegistryModel.reason(reason);address=RegistryModel.address(address);
-  Object.entries({name: formatOwnerName(name, id), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
+  Object.entries({name: formatOwnerName(name, id, metadata.debtorName), id, address, numerator, denominator, date, reason, note}).forEach(([key, value]) => {
     const input = tr.querySelector(`[data-key="${key}"]`); if (value !== undefined) input.value = value;
   });
   tr.dataset.commonGroup = metadata.commonGroup || '';
   tr.dataset.sequence = metadata.sequence || '';
   tr.dataset.relatedShareTypes = (metadata.relatedShareTypes || []).join(',');
-  for(const key of ['registrationSequence','documentKey','sourceOrder','sourceRecordCount','commonGroupLabel','manager','managerAddress'])tr.dataset[key]=String(metadata[key] || '');
+  for(const key of ['registrationSequence','documentKey','sourceOrder','sourceRecordCount','commonGroupLabel','manager','managerAddress','debtorName'])tr.dataset[key]=String(metadata[key] || '');
   tr.dataset.addressExplicitBlank=metadata.addressExplicitBlank?'true':'';
   tr.dataset.commonRefs=JSON.stringify(metadata.commonRefs || []);tr.dataset.issues=JSON.stringify(issues);tr.dataset.groupVerified=metadata.groupVerified?'true':'';
   tr.dataset.ocrImported = metadata.ocrImported ? 'true' : '';
@@ -83,8 +85,9 @@ function genderFromId(id) {
   if (normalized.length !== 10 || !/^[A-Z][12]/.test(normalized)) return '—';
   return normalized[1] === '1' ? '男' : '女';
 }
-function formatOwnerName(name = '', id = '') {
+function formatOwnerName(name = '', id = '', fullName = '') {
   const value = String(name).trim(); const gender = genderFromId(String(id || ''));
+  if (fullName) return value;
   if (!value || gender === '—' || /(先生|小姐)$/.test(value)) return value;
   const title = gender === '男' ? '先生' : '小姐';
   return /[＊*]+/.test(value) ? value.replace(/[＊*]+/g, title) : `${value}${title}`;
@@ -109,7 +112,7 @@ function updateRow(event) {
   }
   const tr = event.currentTarget; const id = tr.querySelector('[data-key="id"]').value;
   tr.querySelector('.gender').textContent = genderFromId(id);
-  const name = tr.querySelector('[data-key="name"]'); name.value = formatOwnerName(name.value, id);
+  const name = tr.querySelector('[data-key="name"]'); name.value = formatOwnerName(name.value, id, tr.dataset.debtorName);
   updateAll();
 }
 function updateAll() {
@@ -137,7 +140,7 @@ function getData() {
   return [...rows.children].map(tr => ({
     ...Object.fromEntries(['name','id','address','numerator','denominator','date','reason','note'].map(key => [key, tr.querySelector('[data-key="' + key + '"]').value])),
     commonGroup:tr.dataset.commonGroup || '', sequence:tr.dataset.sequence || '', relatedShareTypes:tr.dataset.relatedShareTypes ? tr.dataset.relatedShareTypes.split(',') : [],
-    ...Object.fromEntries(['registrationSequence','documentKey','sourceOrder','sourceRecordCount','commonGroupLabel','manager','managerAddress'].map(key=>[key,tr.dataset[key] || ''])),
+    ...Object.fromEntries(['registrationSequence','documentKey','sourceOrder','sourceRecordCount','commonGroupLabel','manager','managerAddress','debtorName'].map(key=>[key,tr.dataset[key] || ''])),
     addressExplicitBlank:tr.dataset.addressExplicitBlank==='true',
     commonRefs:JSON.parse(tr.dataset.commonRefs || '[]'),issues:JSON.parse(tr.dataset.issues || '[]'),groupVerified:tr.dataset.groupVerified==='true',
     ocrImported:tr.dataset.ocrImported === 'true'

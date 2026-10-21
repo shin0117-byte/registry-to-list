@@ -80,6 +80,12 @@ function field(block,label){
  const rest=block.slice(start+label.length+1);boundary.lastIndex=0;const end=boundary.exec(rest);
  return (end?rest.slice(0,end.index):rest).trim();
 }
+function debtorName(text){
+ const source=clean(text).replace(/\s/g,'');
+ const value=source.split(/債務人[：:]/)[1];if(!value)return '';
+ const name=ownerName(value.split(/(?:限制範圍|債權人|債務人|義務人|權利人|登記日期|收件年期|收件字號|其他登記事項)[：:]?/)[0]);
+ return name.match(/^[\u3400-\u9fff·．‧]{2,40}/)?.[0]||'';
+}
 function parseOwners(text,notes=()=>[]){
  let source=clean(text);
  const marker=source.search(/(?:土地|建物)所有權部/);if(marker>=0)source=source.slice(marker);
@@ -90,11 +96,12 @@ function parseOwners(text,notes=()=>[]){
   const share=field(block,'權利範圍').replace(/\s/g,'').replace(new RegExp('['+noise+']','g'),'');
   const cn=share.match(/(\d+)分之(\d+)/),slash=share.match(/(\d+)\/(\d+)/);
   const f=fraction({numerator:cn?.[2]||slash?.[1]||'',denominator:cn?.[1]||slash?.[2]||''});
+  const fullName=debtorName(field(block,'其他登記事項'));
   const name=ownerName(field(block,'所有權人')).replace(/(?:[＊*]{3,}|[A-Z0-9]{2})$/,'').trim();
   const id=field(block,'統一編號').replace(/\s/g,'');
   const rawDate=field(block,'原因發生日期'),rawAddress=field(block,'住址');
   const managerPart=block.includes('管理者：')?block.slice(block.indexOf('管理者：')):'';
-  return {name:name.length<=80?name:'',id:id.length===10?id:'',address:address(rawAddress),addressExplicitBlank:/[（(]\s*空\s*白\s*[）)]/.test(rawAddress),manager:field(managerPart,'管理者').replace(/\s/g,''),managerAddress:address(field(managerPart,'住址')),date:date(rawDate),rawDate,
+  return {name:fullName||(name.length<=80?name:''),debtorName:fullName,id:id.length===10?id:'',address:address(rawAddress),addressExplicitBlank:/[（(]\s*空\s*白\s*[）)]/.test(rawAddress),manager:field(managerPart,'管理者').replace(/\s/g,''),managerAddress:address(field(managerPart,'住址')),date:date(rawDate),rawDate,
    reason:reason(field(block,'登記原因')),numerator:f?.numerator||'',denominator:f?.denominator||'',shareAvailable:!!f,
    common:/公同共有/.test(share),commonRefs:commonRefs(block),sequence,registrationSequence,sourceOrder:sequence?Number(sequence):i+1,
    review:notes(block),issues:rawDate&&!date(rawDate)?['原因發生日期無法確認：'+rawDate.replace(/\s+/g,' ').slice(0,80)]:[]};
@@ -109,6 +116,7 @@ function reconcile(direct,scanned){
   if(candidates.length===1){
    const {o,i}=candidates[0];used.add(i);
    for(const key of ['name','id','address','date','reason','manager','managerAddress']){if(key==='address'&&o.addressExplicitBlank)continue;if(!str(o[key]).trim()||/[�□]/.test(o[key]))o[key]=image[key]||'';}
+   o.debtorName=o.debtorName||image.debtorName||'';if(o.debtorName)o.name=o.debtorName;
    if(!fraction(o)&&fraction(image)){o.numerator=image.numerator;o.denominator=image.denominator;o.shareAvailable=true;o.common=image.common;}
    if(!o.commonRefs?.length)o.commonRefs=image.commonRefs||[];
    if(!o.review.length)o.review=[...(image.review||[])];
@@ -194,5 +202,5 @@ function commonCellSpans(items){
  return result;
 }
 const ownerColumnPercentages=[4,9,26,14,8,8,8,23];
-root.RegistryModel={legacyDraft,digits,clean,repairLabels,date,displayDate,ownerName,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
+root.RegistryModel={legacyDraft,digits,clean,repairLabels,date,displayDate,ownerName,debtorName,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
 })(globalThis);

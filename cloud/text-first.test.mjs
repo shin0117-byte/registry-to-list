@@ -81,3 +81,9 @@ test('unlabelled inheritance warning and labelled restriction remain in business
  assert.ok(notes.some(value=>value.includes('查封')));
  assert.ok(notes.every(value=>!/空白|所有權人/.test(value)));
 });
+
+
+test('debtor full name has no gender title appended, including after editing other fields',()=>{
+ const c=parser();assert.equal(c.formatOwnerName('張完整','A123456789','張完整'),'張完整');
+ assert.equal(c.formatOwnerName('李＊＊','A123456789'),'李先生');
+});

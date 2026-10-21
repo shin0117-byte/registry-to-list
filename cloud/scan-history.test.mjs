@@ -48,3 +48,10 @@ test('latest legacy save is read from the existing key during an upgrade',()=>{
  assert.equal(store.current().fields.parcel,'9');const saved=store.saveCurrent(store.current(),'');
  assert.equal(saved.fields.parcel,'9');assert.equal(saved.revision,'1');
 });
+
+
+test('debtor full name provenance survives current draft and scan history',()=>{
+ const {store}=setup(),snapshot=sample(1);snapshot.rows[0].name='張完整';snapshot.rows[0].debtorName='張完整';
+ store.add(snapshot);assert.equal(store.list()[0].snapshot.rows[0].debtorName,'張完整');
+ assert.equal(c.RegistryScanHistory.sanitize(snapshot).rows[0].debtorName,'張完整');
+});

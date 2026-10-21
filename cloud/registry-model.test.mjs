@@ -103,3 +103,16 @@ test('legacy drafts are detected from missing provenance and unverified groups c
  assert.equal(M.legacyDraft({...legacy,schemaVersion:2,needsSourceRebuild:true}),true);
  assert.equal(M.legacyDraft({rows:[{commonGroup:'g',registrationSequence:'0142',commonRefs:['0142'],groupVerified:true}]}),false);
 });
+
+
+test('restriction debtor name directly replaces owner name within its own record without identity checks',()=>{
+ const notes='（限制登記事項）辦理假扣押查封登記 債權人：測試銀行股份有限公司 債務人：張完整 限制範圍：1/100';
+ const records=M.parseOwners(row(1,'0001','李＊＊','1/100',notes)+row(2,'0002','李＊＊'));
+ assert.equal(records[0].name,'張完整');assert.equal(records[0].debtorName,'張完整');
+ assert.equal(records[1].name,'李＊＊');assert.equal(records[1].debtorName,'');
+ assert.equal(M.debtorName('債權人：測試銀行股份有限公司'),'');
+ assert.equal(M.debtorName('債 務 人：歐陽\n完整 限制範圍：１／９６'),'歐陽完整');
+ const image=M.parseOwners(row(1,'0001','李＊＊','1/100',notes));
+ const merged=M.reconcile(M.parseOwners(row(1,'0001','李＊＊')),image);
+ assert.equal(merged[0].name,'張完整');
+});
