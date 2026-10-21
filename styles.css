@@ -100,3 +100,6 @@ td input[data-key="name"]{min-width:94px;width:94px}td input[data-key="address"]
 @media print{#registryPrintSheet .date-heading{font-size:8pt}}
 
 .draft-warning{padding:12px;border:1px solid #ad6624;background:#fff5e6;color:#783d12;line-height:1.7}.draft-warning button{display:block;margin-top:8px}
+
+.recent-scans h2{font-size:16px}.recent-scan-item{border-top:1px solid var(--line);padding:8px 0;overflow-wrap:anywhere}.recent-scan-item p{font-size:12px;line-height:1.5}.recent-scan-item button{font-size:11px;padding:5px;margin:2px}
+.save-status{font-size:12px;line-height:1.6;color:#176a6c;overflow-wrap:anywhere;margin:0 0 12px}.save-status[data-error="true"]{color:#9a4e25}

@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const rows = $('#rows');
-const state = { files: [], ocrEngine: '', needsSourceRebuild:false };
+const state = { files: [], ocrEngine: '', needsSourceRebuild:false,sourceFiles:[],persistenceReady:false,savingPaused:false,unsaved:false,draftRevision:'',lastSavedContent:'' };
 const demo = [
   ['羅＊＊','','大溪區龍潭鄉三洽水字1243番地',1,9,'---.--.--','總登記','108.7.22未辦繼承列冊'],
   ['卓先生','','桃園市龍潭區三和里店湖一路22號',1,3,'080.01.29','買賣',''],
@@ -128,6 +128,7 @@ function updateAll() {
   $('#totalArea').textContent = summary.area;
   $('#totalRatio').textContent = (summary.groups.some(g=>!g.valid)?'已確認持分小計 ':'持分合計 ')+summary.percent+'%　土地總面積 '+summary.landArea+' 坪'+(summary.complete?'':'（有未確認資料）');
   renderRegistrySummary(summary);
+  autoSaveDraft();
 }
 function toast(text) { const t=$('#toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
 function setProgress(_percent, label) { $('#ocrEngineStatus').textContent = 'OCR：' + label; }
@@ -184,19 +185,54 @@ if(typeof window!=='undefined') {
  window.addEventListener?.('beforeprint',preparePrintView);
  window.addEventListener?.('afterprint',()=>document.querySelector('#registryPrintSheet')?.remove());
 }
-function saveDraft() { localStorage.setItem('registry-draft',JSON.stringify(captureSnapshot()));toast('草稿已儲存於本機瀏覽器'); }
+function persistCurrentDraft(completed=false) {
+ const snapshot=captureSnapshot();
+ if(typeof RegistryScanHistory!=='undefined'){
+  const saved=recentScanStore().saveCurrent(snapshot,state.draftRevision);state.draftRevision=saved.revision;showSavedStatus(saved);
+ }else localStorage.setItem('registry-draft',JSON.stringify(snapshot));
+ state.lastSavedContent=JSON.stringify(snapshot);state.unsaved=false;
+ if(completed&&typeof RegistryScanHistory!=='undefined'){
+  try{saveCompletedScan();}catch(error){const node=$('#saveStatus');if(node)node.textContent='目前清冊已儲存，但掃描歷史保存失敗：'+error.message;}
+ }
+}
+function autoSaveDraft() {
+ if(!state.persistenceReady||state.savingPaused)return;
+ if(JSON.stringify(captureSnapshot())===state.lastSavedContent)return;
+ try{persistCurrentDraft();}catch(error){state.unsaved=true;const node=$('#saveStatus');if(node){node.textContent='尚未儲存：'+error.message;node.dataset.error='true';}}
+}
+function showSavedStatus(snapshot) {
+ const node=$('#saveStatus');if(!node)return;
+ const f=snapshot.fields,label=(snapshot.sourceFiles||[]).join('、')||[f.district,f.section,f.parcel].filter(Boolean).join('');
+ node.textContent='已自動儲存 '+new Date(snapshot.savedAt).toLocaleTimeString('zh-TW',{timeZone:'Asia/Taipei'})+(label?'｜'+label:'');node.dataset.error='';
+}
+function saveDraft() {try{persistCurrentDraft();toast('目前清冊已儲存，重新整理會恢復這份資料');}catch(error){state.unsaved=true;toast('儲存失敗：'+error.message+'；請先匯出，勿重新整理');}}
 function restoreDraft() {
  try{
-  const draft=JSON.parse(localStorage.getItem('registry-draft'));if(!draft)return;
-  state.needsSourceRebuild=RegistryModel.legacyDraft(draft);
+  const draft=typeof RegistryScanHistory!=='undefined'?recentScanStore().current():JSON.parse(localStorage.getItem('registry-draft'));if(!draft)return;
+  state.needsSourceRebuild=RegistryModel.legacyDraft(draft);state.sourceFiles=draft.sourceFiles||[];state.draftRevision=draft.revision||'';
   Object.entries(draft.fields||{}).forEach(([k,v])=>{const field=$('#'+k);if(field)field.value=v;});
   (draft.rows||[]).forEach(r=>addRow([r.name,r.id||'',r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r));
- }catch{}
+  if(draft.savedAt)showSavedStatus(draft);
+ }catch(error){const node=$('#saveStatus');if(node)node.textContent='無法讀取已儲存清冊：'+error.message;}
 }
-function replaceRecognizedRows() {
+function setupAutoSave() {
+ state.lastSavedContent=JSON.stringify(captureSnapshot());state.persistenceReady=true;
+ document.addEventListener?.('input',event=>{if(event.target.closest?.('.metadata'))updateAll();});
+ if(typeof window!=='undefined'){
+  window.addEventListener?.('pagehide',autoSaveDraft);
+  window.addEventListener?.('beforeunload',event=>{autoSaveDraft();if(state.unsaved){event.preventDefault();event.returnValue='';}});
+ }
+}
+function replaceRecognizedRows(replaceAll=false) {
  const previous=captureSnapshot();
- if(previous.rows.length)localStorage.setItem('registry-draft-before-reimport',JSON.stringify(previous));
- const imported=[...rows.children].filter(tr=>state.needsSourceRebuild||tr.dataset.ocrImported==='true'||/自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value));
+ if(previous.rows.length){
+  localStorage.setItem('registry-draft-before-reimport',JSON.stringify(previous));
+  if(typeof RegistryScanHistory!=='undefined')try{
+   const content=JSON.stringify(RegistryScanHistory.sanitize(previous));
+   if(!recentScanStore().list().some(entry=>JSON.stringify(entry.snapshot)===content))recentScanStore().add(previous);
+  }catch{}
+ }
+ const imported=[...rows.children].filter(tr=>replaceAll||state.needsSourceRebuild||tr.dataset.ocrImported==='true'||/自動辨識|謄本未載住址|地址辨識|地址 OCR|公同共有（\d+人；持分坪數合併計算）/.test(tr.querySelector('[data-key="note"]').value));
  imported.forEach(tr=>tr.remove());state.needsSourceRebuild=false;
 }
 function escapeXml(value='') { return String(value).replace(/[<>&"']/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -219,7 +255,38 @@ async function exportPdf() {
 }
 function captureSnapshot() {
   const fields=['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'];
-  return {schemaVersion:2,needsSourceRebuild:state.needsSourceRebuild,fields:Object.fromEntries(fields.map(k=>[k,$('#'+k).value])),rows:getData()};
+  return {schemaVersion:2,needsSourceRebuild:state.needsSourceRebuild,sourceFiles:state.sourceFiles,fields:Object.fromEntries(fields.map(k=>[k,$('#'+k).value])),rows:getData()};
+}
+function recentScanStore(){return RegistryScanHistory.createStore(localStorage);}
+function saveCompletedScan(){recentScanStore().add(captureSnapshot());renderRecentScans();}
+function loadRecentScan(id){
+  try{
+    const entry=recentScanStore().list().find(e=>e.id===id);if(!entry)throw new Error('找不到此筆紀錄');
+    localStorage.setItem('registry-draft-before-reimport',JSON.stringify(captureSnapshot()));
+    // Save first: if storage is unavailable, leave the visible current list unchanged.
+    const saved=recentScanStore().saveCurrent(entry.snapshot,state.draftRevision);state.draftRevision=saved.revision;
+    state.savingPaused=true;state.sourceFiles=entry.snapshot.sourceFiles||[];state.needsSourceRebuild=RegistryModel.legacyDraft(entry.snapshot);rows.replaceChildren();
+    for(const [key,value] of Object.entries(entry.snapshot.fields))$('#'+key).value=value;
+    for(const r of entry.snapshot.rows)addRow([r.name,r.id,r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r);
+    state.savingPaused=false;state.unsaved=false;state.lastSavedContent=JSON.stringify(captureSnapshot());updateAll();showSavedStatus(saved);toast('已載入清冊，不會重掃或扣點');
+  }catch(error){state.savingPaused=false;toast('紀錄載入失敗：'+error.message);}
+}
+function renderRecentScans(){
+  if(typeof RegistryScanHistory==='undefined')return;
+  const list=$('#recentScans'),status=$('#recentScansStatus');if(!list||!status)return;
+  try{
+    const entries=recentScanStore().list();list.replaceChildren();
+    status.textContent=entries.length?'保留最近 '+entries.length+' 筆掃描清冊；目前清冊及手動修改會自動儲存。':'尚無已保存的掃描紀錄。';
+    for(const entry of entries){
+      const item=document.createElement('div');item.className='recent-scan-item';
+      const label=document.createElement('p'),f=entry.snapshot.fields;
+      label.textContent=(entry.snapshot.sourceFiles?.join('、')||[f.district,f.section,f.parcel].join(''))+'｜'+entry.snapshot.rows.length+' 人｜'+new Date(entry.createdAt).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'});
+      const load=document.createElement('button');load.type='button';load.textContent='載入清冊';load.onclick=()=>loadRecentScan(entry.id);
+      const remove=document.createElement('button');remove.type='button';remove.textContent='刪除此紀錄';
+      remove.onclick=()=>{if(confirm('只刪除此台瀏覽器的這筆掃描紀錄？不會刪除目前清冊。')){try{recentScanStore().remove(entry.id);renderRecentScans();}catch(e){toast(e.message);}}};
+      item.append(label,load,remove);list.append(item);
+    }
+  }catch(error){status.textContent='掃描紀錄讀取失敗：'+error.message;}
 }
 function setupDesktopUpdater() {
   if (!window.desktopUpdater) return;
@@ -232,7 +299,7 @@ function setupDesktopUpdater() {
   button.addEventListener('click', async () => { button.disabled = true; try { await window.desktopUpdater.install(); } catch (error) { button.disabled = false; text.textContent = `更新失敗：${error.message || '請稍後再試。'}`; } });
 }
 $('#addRowBtn').addEventListener('click',()=>addRow()); $('#area').addEventListener('input',updateAll); $('#saveBtn').addEventListener('click',saveDraft); $('#printBtn').addEventListener('click',exportPdf); $('#exportBtn').addEventListener('click',exportExcel);
-$('#loadDemoBtn').addEventListener('click',()=>{rows.innerHTML=''; demo.forEach(addRow); toast('已載入範例格式資料');});
+$('#loadDemoBtn').addEventListener('click',()=>{state.savingPaused=true;state.sourceFiles=[];rows.innerHTML='';demo.forEach(addRow);state.savingPaused=false;updateAll();toast('已載入範例格式資料');});
 $('#sourceFile').addEventListener('change',(e)=>{state.files=[...e.target.files];$('#fileList').innerHTML=state.files.map(f=>`<div class="file-item">${escapeXml(f.name)}</div>`).join('');$('#ocrBtn').disabled=!state.files.length;});
 refreshCloudSetup();
 async function runOcr() {
@@ -255,8 +322,8 @@ async function runOcr() {
     const ownerText = chooseExtractionText(mode, source.directText, ocrText);
     const reconciled=mode==='auto'?reconcileDocumentPages(source.pages,pageResults):null;
     if(reconciled&&typeof RegistryAddressRecovery!=='undefined')await RegistryAddressRecovery.recover(reconciled,source.pages,setProgress);
-    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, reconciled, mode === 'auto' ? reconcileLandFields(source.directText, ocrText) : null); setProgress(100, '完成'); if(ocrImages.length) window.prepaid?.finish();
-  } catch (error) { setProgress(0, '未完成：' + error.message); toast(`OCR 無法啟動：${error.message || '請重新整理後再試一次。'}`); }
+    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, reconciled, mode === 'auto' ? reconcileLandFields(source.directText, ocrText) : null); setProgress(100, '完成，目前清冊已儲存'); if(ocrImages.length) window.prepaid?.finish();
+  } catch (error) { setProgress(0, '未完成：' + error.message); toast(`文件處理未完成：${error.message || '請稍後再試。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
 function chooseExtractionText(mode, directText, ocrText) { return cleanTranscriptText(mode === 'ocr' || !directText.trim() ? ocrText : directText); }
@@ -454,7 +521,6 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
   const globalNotes = reconciledLand.review || [];
   const mappedDistrict = await lookupDistrict(fields.section);
   if (mappedDistrict && (!fields.district || mappedDistrict.endsWith(fields.district))) fields.district = mappedDistrict;
-  for (const [id, value] of Object.entries(fields)) if (value && (!$('#' + id).value.trim() || (id === 'district' && mappedDistrict))) { $('#' + id).value = value; filled += 1; }
   const ownershipSection = isolateOwnershipSection(cleanTranscriptText(ownerText));
   const cleanOwners = ownershipSection.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
   let owners = reconciledOwners === null ? extractOwners(ownershipSection, cleanOwners) : reconciledOwners;
@@ -469,7 +535,13 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
   });
   owners = groupCommonOwnership(owners);
   if(!owners.length)throw new Error('未找到權利人，原清冊已保留');
-  replaceRecognizedRows();
+  const differentLand=['district','section','parcel'].some(k=>fields[k]&&$('#'+k).value&&fields[k]!==$('#'+k).value);
+  const differentFile=state.sourceFiles.length&&state.files.length&&state.sourceFiles.join('|')!==state.files.map(f=>f.name).join('|');
+  replaceRecognizedRows(differentLand||differentFile);
+  state.savingPaused=true;state.sourceFiles=state.files.map(file=>file.name);
+  for(const key of ['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building']){
+   const field=$('#'+key);field.value=String(key==='building'?(fields.building||globalNotes.join('；')):(fields[key]||''));if(field.value)filled++;
+  }
   const ownerKey = owner => owner.sequence || [owner.name,owner.id,owner.numerator,owner.denominator,owner.commonGroup].join('|');
   const existing = new Set([...rows.children].map(tr => ownerKey({sequence:tr.dataset.sequence,name:tr.querySelector('[data-key="name"]').value,id:tr.querySelector('[data-key="id"]').value,numerator:tr.querySelector('[data-key="numerator"]').value,denominator:tr.querySelector('[data-key="denominator"]').value,commonGroup:tr.dataset.commonGroup})));
   const newOwners = owners.filter(owner => { const key=ownerKey(owner); if (existing.has(key)) return false; existing.add(key); return true; });
@@ -479,8 +551,9 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
     addRow([owner.name,owner.id,owner.address,owner.numerator,owner.denominator,owner.date,owner.reason,note],
       {...owner,relatedShareTypes:owner.relatedShareTypes || [],ocrImported:true});
   });
+  state.savingPaused=false;
   updateAll();
-  localStorage.setItem('registry-draft',JSON.stringify(captureSnapshot()));
+  persistCurrentDraft(true);
   toast(`讀取完成：土地資料帶入 ${filled} 項，新增權利人 ${newOwners.length} 筆。`);
 }
 function extractLandFields(text) {
@@ -606,3 +679,5 @@ $('#ocrBtn').addEventListener('click', runOcr);
 
 restoreDraft();
 updateAll();
+renderRecentScans();
+setupAutoSave();
