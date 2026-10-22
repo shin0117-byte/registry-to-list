@@ -444,7 +444,7 @@ function reconcileDocumentPages(pages = [], results = []) {
   }
   return owners;
 }
-const BUSINESS_NOTE = /抵押權|假扣押|假處分|查封|扣押|禁止處分|限制登記|限制事項|債權人|債務人|未辦繼承|列冊管理|列冊|國產署|國有財產署|標售|公同共有/;
+const BUSINESS_NOTE = /地上權|抵押權|假扣押|假處分|查封|扣押|禁止處分|限制登記|限制事項|債權人|債務人|未辦繼承|列冊管理|列冊|國產署|國有財產署|標售|公同共有/;
 function isBusinessNote(value) { return BUSINESS_NOTE.test(value) && !/不一致|採用OCR|請校對|影像補入|未辨識|地址辨識|謄本未載/.test(value); }
 function businessNoteClauses(text) {
  const cleaned=RegistryModel.clean(text).replace(/[（(]\s*空\s*白\s*[）)]/g,'').replace(/\b(?:[A-Z]\s?[A-Z0-9]|[0-9]\s?[A-Z])\b/g,'').replace(/\n\s*/g,'').trim();
@@ -453,7 +453,7 @@ function businessNoteClauses(text) {
 function otherRightsNotes(text) {
   const source=cleanTranscriptText(text);
   const start=source.search(/土\s*地\s*他\s*項\s*權\s*利\s*部/);
-  return start<0 ? [] : [...new Set(source.slice(start).split(/(?=[（(]\s*\d{4}\s*[）)]\s*登記次序：)/).filter(block=>!/權利種類：\s*(?:最高限額|普通)?抵押權/.test(block)).flatMap(businessNoteClauses))];
+  return start<0 ? [] : [...new Set(source.slice(start).split(/(?=[（(]\s*\d{4}\s*[）)]\s*登記次序：)/).filter(block=>!/權利種類：\s*(?:(?:最高限額|普通)?抵押權|(?:區分|普通)?地上權)/.test(block)).flatMap(businessNoteClauses))];
 }
 function registrationNotes(text, landOnly=false) {
   let source=cleanTranscriptText(text);

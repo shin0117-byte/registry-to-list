@@ -3,7 +3,7 @@
 const str=v=>String(v??'');
 const digits=v=>str(v).replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248)).replace(/／/g,'/');
 const noise='屏東縣枋寮地政事務所';
-const labels=['權利種類','擔保債權總金額','債權總金額','標的登記次序','設定權利範圍','存續期間','清償日期','權利標的','原因發生日期','相關他項權利登記次序','歷次取得權利範圍','前次移轉現值或原規定地價','其他登記事項','當期申報地價','登記次序','登記日期','登記原因','所有權人','統一編號','出生日期','住址','管理者','權利範圍','權狀字號'];
+const labels=['地租','權利價值','設定目的','使用目的','使用範圍','使用方法','權利種類','擔保債權總金額','債權總金額','標的登記次序','設定權利範圍','存續期間','清償日期','權利標的','原因發生日期','相關他項權利登記次序','歷次取得權利範圍','前次移轉現值或原規定地價','其他登記事項','當期申報地價','登記次序','登記日期','登記原因','所有權人','統一編號','出生日期','住址','管理者','權利範圍','權狀字號'];
 function repairLabels(text){
  let result=str(text);
  for(const label of labels){
@@ -122,22 +122,45 @@ function mortgageRefs(value){
  }
  return [...refs];
 }
-function parseMortgages(text){
+function otherRightRecords(text){
  const source=clean(text),start=source.search(/(?:土地|建物)他項權利部/);if(start<0)return [];
  const section=source.slice(start),heads=[...section.matchAll(/(?:[（(]\s*\d{1,4}\s*[）)]\s*|(?:^|\n)[ \t]*)登記次序：([^\n]*)/g)];
  return heads.flatMap((head,index)=>{
   const block=section.slice(head.index,heads[index+1]?.index??section.length);
-  const kind=field(block,'權利種類').match(/^(最高限額抵押權|普通抵押權|抵押權)/)?.[1];
-  const id=registration(head[1].match(/^\s*(\d{1,4}(?:-\d{3})?)/)?.[1]||'');if(!kind||!id)return [];
+  const id=registration(head[1].match(/^\s*(\d{1,4}(?:-\d{3})?)/)?.[1]||'');if(!id)return [];
+  return [{block,registrationSequence:id,kind:field(block,'權利種類'),targets:mortgageRefs(field(block,'標的登記次序'))}];
+ });
+}
+function parseMortgages(text){
+ return otherRightRecords(text).flatMap(({block,registrationSequence,kind:rawKind,targets})=>{
+  const kind=rawKind.match(/^(最高限額抵押權|普通抵押權|抵押權)/)?.[1];if(!kind)return [];
   const raw=(field(block,'擔保債權總金額')||field(block,'債權總金額')).replace(/[＊*\s]/g,'').replace(/，/g,',').replace(/台幣/g,'臺幣');
   const money=raw.match(/((?:本金最高限額|最高限額)?(?:新臺幣|美元|美金|人民幣|港幣|日圓|日幣|歐元)?)(\d[\d,]*(?:\.\d+)?)元/);
   let amount='';
   if(money){const [whole,decimal]=money[2].replace(/,/g,'').split('.');amount=money[1]+whole.replace(/\B(?=(\d{3})+(?!\d))/g,',')+(decimal?'.'+decimal:'')+'元';if(kind==='最高限額抵押權'&&!/最高限額/.test(amount))amount='最高限額'+amount;}
-  return [{registrationSequence:id,kind,amount,targets:mortgageRefs(field(block,'標的登記次序'))}];
+  return [{registrationSequence,kind,amount,targets}];
  });
 }
+function surfaceRightNote(item){
+ return item.kind+'（存續期間：'+(item.duration||'待確認')+'）';
+}
+function parseSurfaceRights(text){
+ return otherRightRecords(text).flatMap(({block,registrationSequence,kind:rawKind,targets})=>{
+  const kind=rawKind.match(/^(區分地上權|普通地上權|地上權)/)?.[1];if(!kind)return [];
+  const duration=field(block,'存續期間').split(/\n[^\n：:]{1,20}[：:]/)[0].split('\n').filter(line=>!/^\s*[屏東縣枋寮港地政事務所]\s*$/.test(line)).join('')
+   .replace(/[＊*\s]/g,'').replace(/^[（(]空白[）)]$/,'');
+  return [{registrationSequence,kind,duration,targets}];
+ });
+}
+function reconcileRightRecords(owner,image,key,detail){
+ const direct=owner[key]||[],known=[...(owner.mortgages||[]),...(owner.surfaceRights||[])];
+ const allowed=(image[key]||[]).filter(item=>!owner.mortgageSectionPresent||direct.some(record=>record.registrationSequence===item.registrationSequence)||(!known.some(record=>record.registrationSequence===item.registrationSequence)&&(owner.relatedMortgageRefs||[]).includes(item.registrationSequence)));
+ const records=new Map(allowed.map(item=>[item.registrationSequence,item]));
+ for(const item of direct){const fallback=records.get(item.registrationSequence);records.set(item.registrationSequence,{...item,[detail]:item[detail]||fallback?.[detail]||''});}
+ return [...records.values()];
+}
 function parseOwners(text,notes=()=>[]){
- const fullSource=clean(text),mortgages=parseMortgages(fullSource),mortgageSectionPresent=/(?:土地|建物)他項權利部/.test(fullSource);
+ const fullSource=clean(text),mortgages=parseMortgages(fullSource),surfaceRights=parseSurfaceRights(fullSource),mortgageSectionPresent=/(?:土地|建物)他項權利部/.test(fullSource);
  let source=fullSource;
  const marker=source.search(/(?:土地|建物)所有權部/);if(marker>=0)source=source.slice(marker);
  const end=source.search(/(?:土地|建物)他項權利部/);if(end>=0)source=source.slice(0,end);
@@ -149,6 +172,7 @@ function parseOwners(text,notes=()=>[]){
   const f=fraction({numerator:cn?.[2]||slash?.[1]||'',denominator:cn?.[1]||slash?.[2]||''});
   const relatedRights=mortgageRefs(field(block,'相關他項權利登記次序'));
   const ownerMortgages=mortgages.filter(item=>item.targets.includes(registrationSequence)||relatedRights.includes(item.registrationSequence));
+  const ownerSurfaceRights=surfaceRights.filter(item=>item.targets.includes(registrationSequence)||relatedRights.includes(item.registrationSequence));
   const fullName=debtorName(field(block,'其他登記事項'));
   const name=ownerName(field(block,'所有權人')).replace(/(?:[＊*]{3,}|[A-Z0-9]{2})$/,'').trim();
   const id=field(block,'統一編號').replace(/\s/g,'');
@@ -157,7 +181,7 @@ function parseOwners(text,notes=()=>[]){
   return {name:fullName||(name.length<=80?name:''),debtorName:fullName,id:id.length===10?id:'',address:address(rawAddress),addressExplicitBlank:/[（(]\s*空\s*白\s*[）)]/.test(rawAddress),manager:field(managerPart,'管理者').replace(/\s/g,''),managerAddress:address(field(managerPart,'住址')),date:date(rawDate),rawDate,
    reason:reason(field(block,'登記原因')),numerator:f?.numerator||'',denominator:f?.denominator||'',shareAvailable:!!f,
    common:/公同共有/.test(share),commonRefs:commonRefs(block),sequence,registrationSequence,sourceOrder:sequence?Number(sequence):i+1,
-   mortgages:ownerMortgages,relatedMortgageRefs:relatedRights,mortgageSectionPresent,review:[...notes(block),...ownerMortgages.map(mortgageNote)],issues:rawDate&&!date(rawDate)?['原因發生日期無法確認：'+rawDate.replace(/\s+/g,' ').slice(0,80)]:[]};
+   mortgages:ownerMortgages,surfaceRights:ownerSurfaceRights,relatedMortgageRefs:relatedRights,mortgageSectionPresent,review:[...notes(block),...ownerMortgages.map(mortgageNote),...ownerSurfaceRights.map(surfaceRightNote)],issues:rawDate&&!date(rawDate)?['原因發生日期無法確認：'+rawDate.replace(/\s+/g,' ').slice(0,80)]:[]};
  }).filter(o=>o.sequence||o.registrationSequence||o.name||o.id||o.address);
 }
 function reconcile(direct,scanned){
@@ -173,11 +197,9 @@ function reconcile(direct,scanned){
    if(!fraction(o)&&fraction(image)){o.numerator=image.numerator;o.denominator=image.denominator;o.shareAvailable=true;o.common=image.common;}
    if(!o.commonRefs?.length)o.commonRefs=image.commonRefs||[];
    if(!o.review.length)o.review=[...(image.review||[])];
-   const allowed=(image.mortgages||[]).filter(item=>!o.mortgageSectionPresent||(o.mortgages||[]).some(direct=>direct.registrationSequence===item.registrationSequence)||(o.relatedMortgageRefs||[]).includes(item.registrationSequence));
-   const mortgageMap=new Map(allowed.map(item=>[item.registrationSequence,item]));
-   for(const item of o.mortgages||[]){const fallback=mortgageMap.get(item.registrationSequence);mortgageMap.set(item.registrationSequence,{...item,amount:item.amount||fallback?.amount||''});}
-   o.mortgages=[...mortgageMap.values()];
-   o.review=[...new Set([...o.review.filter(note=>!note.startsWith('抵押權（登記次序：')),...o.mortgages.map(mortgageNote)])];
+   const mortgages=reconcileRightRecords(o,image,'mortgages','amount'),surfaceRights=reconcileRightRecords(o,image,'surfaceRights','duration');
+   o.mortgages=mortgages;o.surfaceRights=surfaceRights;
+   o.review=[...new Set([...o.review.filter(note=>!note.startsWith('抵押權（登記次序：')&&!/^(?:區分|普通)?地上權（存續期間：/.test(note)),...mortgages.map(mortgageNote),...surfaceRights.map(surfaceRightNote)])];
    if(o.date)o.issues=o.issues.filter(x=>!x.startsWith('原因發生日期'));
   }else if(!candidates.length){merged.push({...image,review:[...(image.review||[])],issues:[...(image.issues||[])]});used.add(merged.length-1);}
  }
@@ -260,5 +282,5 @@ function commonCellSpans(items){
  return result;
 }
 const ownerColumnPercentages=[4,9,26,14,8,8,8,23];
-root.RegistryModel={legacyDraft,digits,clean,repairLabels,date,displayDate,ownerName,debtorName,compactNote,parseMortgages,mortgageNote,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
+root.RegistryModel={legacyDraft,digits,clean,repairLabels,date,displayDate,ownerName,debtorName,compactNote,parseMortgages,mortgageNote,parseSurfaceRights,surfaceRightNote,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
 })(globalThis);
