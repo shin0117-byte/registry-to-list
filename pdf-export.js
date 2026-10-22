@@ -31,6 +31,13 @@ function definition(snapshot){
   ...(f.building?[{text:'補充資訊：'+text(f.building),margin:[0,0,0,5]}]:[]),
   {text:'依原謄本順序列示；相同組號為同一公同共有關係，共同持分於組別合計只計一次。',fontSize:9,margin:[0,0,0,8]},
   {table:{headerRows:1,widths,body,dontBreakRows:false},layout},
+  ...((snapshot.otherRights||[]).length?[
+   {text:'他項權利明細',fontSize:13,bold:true,alignment:'center',margin:[0,14,0,6]},
+   {table:{headerRows:1,widths:[12,18,10,18,20,22].map(n=>(841.89-48-48-3.5)*n/100),body:[
+    model.otherRightHeaders.map(value=>({text:value,fillColor:'#e4efed',alignment:'center',bold:true})),
+    ...snapshot.otherRights.map(item=>model.otherRightValues(item).map((value,index)=>({text:wrap(value),alignment:[2,3].includes(index)?'right':'left'})))
+   ],dontBreakRows:false},layout}
+  ]:[]),
   {text:'共有組別合計',fontSize:13,bold:true,alignment:'center',margin:[0,14,0,6]}
  ];
  if(summary.groups.length){

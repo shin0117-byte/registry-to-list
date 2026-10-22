@@ -2,10 +2,11 @@
  'use strict';
  const key='registry-scan-history-v1',currentKey='registry-draft';
  const fields=['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'];
+ const rightsKeys=['registrationSequence','kind','holder','creditRatio','amount','duration','collateralParcels','documentKey'];
  const rowKeys=['name','id','address','numerator','denominator','date','reason','note','commonGroup','sequence','registrationSequence','documentKey','sourceOrder','sourceRecordCount','commonGroupLabel','manager','managerAddress','debtorName'];
  function sanitize(snapshot){
   if(!snapshot||!snapshot.fields||!Array.isArray(snapshot.rows))throw new Error('清冊紀錄格式錯誤');
-  return {schemaVersion:snapshot.schemaVersion===2?2:undefined,needsSourceRebuild:snapshot.needsSourceRebuild===true,sourceFiles:Array.isArray(snapshot.sourceFiles)?snapshot.sourceFiles.map(String):[],fields:Object.fromEntries(fields.map(k=>[k,String(snapshot.fields[k]??'')])),
+  return {otherRights:Array.isArray(snapshot.otherRights)?snapshot.otherRights.filter(item=>item&&typeof item==='object').map(item=>Object.fromEntries(rightsKeys.map(key=>[key,String(item[key]??'')]))):[],schemaVersion:snapshot.schemaVersion===2?2:undefined,needsSourceRebuild:snapshot.needsSourceRebuild===true,sourceFiles:Array.isArray(snapshot.sourceFiles)?snapshot.sourceFiles.map(String):[],fields:Object.fromEntries(fields.map(k=>[k,String(snapshot.fields[k]??'')])),
    rows:snapshot.rows.map(r=>({...Object.fromEntries(rowKeys.map(k=>[k,String(r[k]??'')])),relatedShareTypes:Array.isArray(r.relatedShareTypes)?r.relatedShareTypes.map(String):[],addressExplicitBlank:r.addressExplicitBlank===true,commonRefs:Array.isArray(r.commonRefs)?r.commonRefs.map(String):[],issues:Array.isArray(r.issues)?r.issues.map(String):[],groupVerified:r.groupVerified===true,ocrImported:r.ocrImported===true}))};
  }
  function createStore(storage,makeId=()=>crypto.randomUUID(),now=()=>Date.now()){

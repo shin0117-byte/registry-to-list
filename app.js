@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const rows = $('#rows');
-const state = { files: [], ocrEngine: '', needsSourceRebuild:false,sourceFiles:[],persistenceReady:false,savingPaused:false,unsaved:false,draftRevision:'',lastSavedContent:'' };
+const state = { files: [], ocrEngine: '', needsSourceRebuild:false,sourceFiles:[],otherRights:[],persistenceReady:false,savingPaused:false,unsaved:false,draftRevision:'',lastSavedContent:'' };
 const demo = [
   ['羅＊＊','','大溪區龍潭鄉三洽水字1243番地',1,9,'---.--.--','總登記','108.7.22未辦繼承列冊'],
   ['卓先生','','桃園市龍潭區三和里店湖一路22號',1,3,'080.01.29','買賣',''],
@@ -131,6 +131,7 @@ function updateAll() {
   $('#totalArea').textContent = summary.area;
   $('#totalRatio').textContent = (summary.groups.some(g=>!g.valid)?'已確認持分小計 ':'持分合計 ')+summary.percent+'%　土地總面積 '+summary.landArea+' 坪'+(summary.complete?'':'（有未確認資料）');
   renderRegistrySummary(summary);
+  renderOtherRights();
   autoSaveDraft();
 }
 function toast(text) { const t=$('#toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
@@ -175,10 +176,16 @@ function summaryHtml(summary) {
   (summary.issues.length?'<details open><summary>待核對 '+summary.issues.length+' 項</summary><ul>'+summary.issues.map(issue=>'<li>'+escapeXml(issue)+'</li>').join('')+'</ul></details>':'');
 }
 function renderRegistrySummary(summary) { const node=$('#registrySummary');if(node)node.innerHTML=summaryHtml(summary); }
+function otherRightsHtml(items=state.otherRights) {
+ return '<table class="group-table other-rights-table"><colgroup>'+[12,18,10,18,20,22].map(width=>'<col style="width:'+width+'%">').join('')+'</colgroup><thead><tr>'+RegistryModel.otherRightHeaders.map(label=>'<th>'+label+'</th>').join('')+'</tr></thead><tbody>'+items.map(item=>'<tr>'+RegistryModel.otherRightValues(item).map((value,index)=>'<td'+([2,3].includes(index)?' style="text-align:right"':'')+'>'+escapeXml(value).replace(/\n/g,'<br>')+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+}
+function renderOtherRights() {
+ const panel=$('#otherRightsPanel'),node=$('#otherRightsDetails');if(panel)panel.hidden=!state.otherRights.length;if(node)node.innerHTML=state.otherRights.length?otherRightsHtml():'';
+}
 function printableHtml() {
  const title=[$('#district').value,$('#section').value,$('#parcel').value].join('')+'地號清冊',items=getData(),area=Number($('#area').value)||0;
  const headers=['次序','姓名','地址','持分','持分坪數','原因發生日期<br>（民國）','登記原因','備註／組號'];
- return '<h1>'+escapeXml(title)+'</h1><p>土地總面積：'+area+' m²（'+(area*.3025).toFixed(2)+' 坪）　'+escapeXml(landValueLabel())+escapeXml($('#value').value)+' 元／m²</p><p>依原謄本排序；相同組號為同一公同共有關係，持分另列組別合計。</p><table class="print-owner-table"><colgroup>'+RegistryModel.ownerColumnPercentages.map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+headers.map((x,i)=>'<th'+(i===5?' class="date-heading"':'')+'>'+x+'</th>').join('')+'</tr></thead><tbody>'+buildExportRows(items,area)+'</tbody></table><h2>共有組別合計與核對</h2>'+summaryHtml(RegistryModel.summary(items,area));
+ return '<h1>'+escapeXml(title)+'</h1><p>土地總面積：'+area+' m²（'+(area*.3025).toFixed(2)+' 坪）　'+escapeXml(landValueLabel())+escapeXml($('#value').value)+' 元／m²</p><p>依原謄本排序；相同組號為同一公同共有關係，持分另列組別合計。</p><table class="print-owner-table"><colgroup>'+RegistryModel.ownerColumnPercentages.map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+headers.map((x,i)=>'<th'+(i===5?' class="date-heading"':'')+'>'+x+'</th>').join('')+'</tr></thead><tbody>'+buildExportRows(items,area)+'</tbody></table>'+(state.otherRights.length?'<h2>他項權利明細</h2>'+otherRightsHtml():'')+'<h2>共有組別合計與核對</h2>'+summaryHtml(RegistryModel.summary(items,area));
 }
 function preparePrintView() {
  document.querySelector('#registryPrintSheet')?.remove();
@@ -212,7 +219,7 @@ function saveDraft() {try{persistCurrentDraft();toast('目前清冊已儲存，�
 function restoreDraft() {
  try{
   const draft=typeof RegistryScanHistory!=='undefined'?recentScanStore().current():JSON.parse(localStorage.getItem('registry-draft'));if(!draft)return;
-  state.needsSourceRebuild=RegistryModel.legacyDraft(draft);state.sourceFiles=draft.sourceFiles||[];state.draftRevision=draft.revision||'';
+  state.needsSourceRebuild=RegistryModel.legacyDraft(draft);state.sourceFiles=draft.sourceFiles||[];state.otherRights=draft.otherRights||[];state.draftRevision=draft.revision||'';
   Object.entries(draft.fields||{}).forEach(([k,v])=>{const field=$('#'+k);if(field)field.value=v;});
   (draft.rows||[]).forEach(r=>addRow([r.name,r.id||'',r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r));
   if(draft.savedAt)showSavedStatus(draft);
@@ -265,7 +272,7 @@ async function exportPdf() {
 }
 function captureSnapshot() {
   const fields=['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'];
-  return {schemaVersion:2,needsSourceRebuild:state.needsSourceRebuild,sourceFiles:state.sourceFiles,fields:Object.fromEntries(fields.map(k=>[k,$('#'+k).value])),rows:getData()};
+  return {schemaVersion:2,needsSourceRebuild:state.needsSourceRebuild,sourceFiles:state.sourceFiles,otherRights:state.otherRights,fields:Object.fromEntries(fields.map(k=>[k,$('#'+k).value])),rows:getData()};
 }
 function recentScanStore(){return RegistryScanHistory.createStore(localStorage);}
 function saveCompletedScan(){recentScanStore().add(captureSnapshot());renderRecentScans();}
@@ -275,7 +282,7 @@ function loadRecentScan(id){
     localStorage.setItem('registry-draft-before-reimport',JSON.stringify(captureSnapshot()));
     // Save first: if storage is unavailable, leave the visible current list unchanged.
     const saved=recentScanStore().saveCurrent(entry.snapshot,state.draftRevision);state.draftRevision=saved.revision;
-    state.savingPaused=true;state.sourceFiles=entry.snapshot.sourceFiles||[];state.needsSourceRebuild=RegistryModel.legacyDraft(entry.snapshot);rows.replaceChildren();
+    state.savingPaused=true;state.sourceFiles=entry.snapshot.sourceFiles||[];state.otherRights=entry.snapshot.otherRights||[];state.needsSourceRebuild=RegistryModel.legacyDraft(entry.snapshot);rows.replaceChildren();
     for(const [key,value] of Object.entries(entry.snapshot.fields))$('#'+key).value=value;
     for(const r of entry.snapshot.rows)addRow([r.name,r.id,r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r);
     state.savingPaused=false;state.unsaved=false;state.lastSavedContent=JSON.stringify(captureSnapshot());updateAll();showSavedStatus(saved);toast('已載入清冊，不會重掃或扣點');
@@ -309,7 +316,7 @@ function setupDesktopUpdater() {
   button.addEventListener('click', async () => { button.disabled = true; try { await window.desktopUpdater.install(); } catch (error) { button.disabled = false; text.textContent = `更新失敗：${error.message || '請稍後再試。'}`; } });
 }
 $('#addRowBtn').addEventListener('click',()=>addRow()); $('#area').addEventListener('input',updateAll); $('#saveBtn').addEventListener('click',saveDraft); $('#printBtn').addEventListener('click',exportPdf); $('#exportBtn').addEventListener('click',exportExcel);
-$('#loadDemoBtn').addEventListener('click',()=>{state.savingPaused=true;state.sourceFiles=[];rows.innerHTML='';demo.forEach(addRow);state.savingPaused=false;updateAll();toast('已載入範例格式資料');});
+$('#loadDemoBtn').addEventListener('click',()=>{state.savingPaused=true;state.sourceFiles=[];state.otherRights=[];rows.innerHTML='';demo.forEach(addRow);state.savingPaused=false;updateAll();toast('已載入範例格式資料');});
 $('#sourceFile').addEventListener('change',(e)=>{state.files=[...e.target.files];$('#fileList').innerHTML=state.files.map(f=>`<div class="file-item">${escapeXml(f.name)}</div>`).join('');$('#ocrBtn').disabled=!state.files.length;});
 refreshCloudSetup();
 async function runOcr() {
@@ -332,7 +339,9 @@ async function runOcr() {
     const ownerText = chooseExtractionText(mode, source.directText, ocrText);
     const reconciled=mode==='auto'?reconcileDocumentPages(source.pages,pageResults):null;
     if(reconciled&&typeof RegistryAddressRecovery!=='undefined')await RegistryAddressRecovery.recover(reconciled,source.pages,setProgress);
-    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, reconciled, mode === 'auto' ? reconcileLandFields(source.directText, ocrText) : null); setProgress(100, '完成，目前清冊已儲存'); if(ocrImages.length) window.prepaid?.finish();
+    const land=mode==='auto'?reconcileLandFields(source.directText,ocrText):null;
+    if(land)land.otherRights=reconcileDocumentRights(source.pages,pageResults);
+    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, reconciled, land); setProgress(100, '完成，目前清冊已儲存'); if(ocrImages.length) window.prepaid?.finish();
   } catch (error) { setProgress(0, '未完成：' + error.message); toast(`文件處理未完成：${error.message || '請稍後再試。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
@@ -444,6 +453,11 @@ function reconcileDocumentPages(pages = [], results = []) {
   }
   return owners;
 }
+function reconcileDocumentRights(pages=[],results=[]) {
+ const recognized=new Map(results.map(result=>[result.pageKey,result.text])),documents=new Map();
+ for(const page of pages){if(!documents.has(page.fileKey))documents.set(page.fileKey,{direct:[],ocr:[]});const doc=documents.get(page.fileKey);doc.direct.push(page.directText||'');doc.ocr.push(recognized.get(page.pageKey)||'');}
+ return [...documents].flatMap(([documentKey,doc])=>RegistryModel.reconcileOtherRights(RegistryModel.parseOtherRights(doc.direct.join('\n')),RegistryModel.parseOtherRights(doc.ocr.join('\n'))).map(item=>({...item,documentKey})));
+}
 const BUSINESS_NOTE = /地上權|抵押權|假扣押|假處分|查封|扣押|禁止處分|限制登記|限制事項|債權人|債務人|未辦繼承|列冊管理|列冊|國產署|國有財產署|標售|公同共有/;
 function isBusinessNote(value) { return BUSINESS_NOTE.test(value) && !/不一致|採用OCR|請校對|影像補入|未辨識|地址辨識|謄本未載/.test(value); }
 function businessNoteClauses(text) {
@@ -476,7 +490,7 @@ function reconcileLandFields(directText, ocrText) {
   }
   const directNotes=[...registrationNotes(direct,true),...otherRightsNotes(direct)];
   const review=[...new Set(directNotes.length ? directNotes : [...registrationNotes(scanned,true),...otherRightsNotes(scanned)])];
-  return {fields,review};
+  return {fields,review,otherRights:RegistryModel.reconcileOtherRights(RegistryModel.parseOtherRights(direct),RegistryModel.parseOtherRights(scanned))};
 }
 function validateOwnerIdentity(owner) {
   let name=RegistryModel.ownerName(owner.name),id=String(owner.id || '').replace(/\s/g,'');
@@ -527,7 +541,7 @@ function rebuildPdfLines(items) {
 async function applyExtractedData(landText, ownerText, addressTexts = [], reconciledOwners = null, reconciledLand = null) {
   const cleanLand = cleanTranscriptText(landText).replace(/\s+/g, ' ').trim();
   const fields = reconciledLand ? reconciledLand.fields : extractLandFields(cleanLand); let filled = 0;
-  if (!reconciledLand) reconciledLand = {review:[...registrationNotes(landText,true),...otherRightsNotes(landText)]};
+  if (!reconciledLand) reconciledLand = {review:[...registrationNotes(landText,true),...otherRightsNotes(landText)],otherRights:RegistryModel.parseOtherRights(ownerText)};
   const globalNotes = reconciledLand.review || [];
   const mappedDistrict = await lookupDistrict(fields.section);
   if (mappedDistrict && (!fields.district || mappedDistrict.endsWith(fields.district))) fields.district = mappedDistrict;
@@ -547,7 +561,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
   const differentLand=['district','section','parcel'].some(k=>fields[k]&&$('#'+k).value&&fields[k]!==$('#'+k).value);
   const differentFile=state.sourceFiles.length&&state.files.length&&state.sourceFiles.join('|')!==state.files.map(f=>f.name).join('|');
   replaceRecognizedRows(differentLand||differentFile);
-  state.savingPaused=true;state.sourceFiles=state.files.map(file=>file.name);
+  state.savingPaused=true;state.sourceFiles=state.files.map(file=>file.name);state.otherRights=reconciledLand.otherRights||[];
   for(const key of ['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building']){
    const field=$('#'+key);field.value=String(key==='building'?(fields.building||globalNotes.join('；')):(fields[key]||''));if(field.value)filled++;
   }

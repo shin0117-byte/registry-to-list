@@ -37,6 +37,21 @@ function build(snapshot,Excel){
   for(const col of [1,4,5,6,7])row.getCell(col).alignment={vertical:'middle',horizontal:[4,5].includes(col)?'right':'center',wrapText:col!==6};
  });
  for(const [col,key] of [[4,'share'],[5,'share'],[6,'date'],[7,'reason']])spans[key].forEach((count,index)=>{if(count>1)sheet.mergeCells(first+index,col,first+index+count-1,col);});
+ if((snapshot.otherRights||[]).length){
+  sheet.addRow([]).height=10;mergedLine('他項權利明細',13,true);
+  const mapping=[[1,2],[3,3],[4,4],[5,6],[7,7],[8,8]];
+  const entries=[model.otherRightHeaders,...snapshot.otherRights.map(model.otherRightValues)];
+  entries.forEach((values,index)=>{
+   const row=sheet.addRow(Array(8).fill(null));style(row,index===0);let height=32;
+   values.forEach((value,column)=>{
+    const shown=index&&column===3?value.replace(/^(.+?)(\d[\d,.]*元)$/,'$1\n$2'):index&&column===4?value.replace(/至/,'\n至'):value;
+    const [a,b]=mapping[column],cell=row.getCell(a);cell.value=shown;cell.numFmt='@';
+    cell.alignment={vertical:'top',wrapText:true,horizontal:index===0?'center':([2,3].includes(column)?'right':'left')};
+    if(a!==b)sheet.mergeCells(row.number,a,row.number,b);
+    height=Math.max(height,lines(shown,widths.slice(a-1,b).reduce((sum,width)=>sum+width,0))*15+8);
+   });row.height=Math.min(409,height);
+  });
+ }
  sheet.addRow([]).height=10;mergedLine('共有組別合計',13,true);
  if(summary.groups.length){
   const row=sheet.addRow(['組號','清冊次序','主登記次序','筆數','共同持分','合計坪數','核對','']);style(row,true);sheet.mergeCells(row.number,7,row.number,8);row.height=32;

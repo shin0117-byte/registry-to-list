@@ -3,7 +3,7 @@
 const str=v=>String(v??'');
 const digits=v=>str(v).replace(/[０-９]/g,c=>String.fromCharCode(c.charCodeAt(0)-65248)).replace(/／/g,'/');
 const noise='屏東縣枋寮地政事務所';
-const labels=['地租','權利價值','設定目的','使用目的','使用範圍','使用方法','權利種類','擔保債權總金額','債權總金額','標的登記次序','設定權利範圍','存續期間','清償日期','權利標的','原因發生日期','相關他項權利登記次序','歷次取得權利範圍','前次移轉現值或原規定地價','其他登記事項','當期申報地價','登記次序','登記日期','登記原因','所有權人','統一編號','出生日期','住址','管理者','權利範圍','權狀字號'];
+const labels=['權利人','債權額比例','共同擔保地號','共同擔保建號','證明書字號','收件年期','地租','權利價值','設定目的','使用目的','使用範圍','使用方法','權利種類','擔保債權總金額','債權總金額','標的登記次序','設定權利範圍','存續期間','清償日期','權利標的','原因發生日期','相關他項權利登記次序','歷次取得權利範圍','前次移轉現值或原規定地價','其他登記事項','當期申報地價','登記次序','登記日期','登記原因','所有權人','統一編號','出生日期','住址','管理者','權利範圍','權狀字號'];
 function repairLabels(text){
  let result=str(text);
  for(const label of labels){
@@ -144,14 +144,45 @@ function parseMortgages(text){
 function surfaceRightNote(item){
  return item.kind+'（存續期間：'+(item.duration||'待確認')+'）';
 }
+function rightFieldText(value,removeMask=false){
+ let result=str(value).split('\n').filter(line=>!/^\s*(?:[屏東縣枋寮港地政事務所]|[A-Z0-9]{2})\s*$/.test(line))
+  .map(line=>line.replace(/\s+[屏東縣枋寮港地政事務所]\s*$/,'').trim()).join(' ').replace(/\s+/g,' ').trim();
+ if(removeMask)result=result.replace(/[＊*]/g,'');
+ return /^[（(]空白[）)]$/.test(result)?'':result;
+}
+function rightDuration(block){
+ return rightFieldText(field(block,'存續期間').split(/\n[^\n：:]{1,20}[：:]/)[0],true).replace(/\s/g,'');
+}
 function parseSurfaceRights(text){
  return otherRightRecords(text).flatMap(({block,registrationSequence,kind:rawKind,targets})=>{
   const kind=rawKind.match(/^(區分地上權|普通地上權|地上權)/)?.[1];if(!kind)return [];
-  const duration=field(block,'存續期間').split(/\n[^\n：:]{1,20}[：:]/)[0].split('\n').filter(line=>!/^\s*[屏東縣枋寮港地政事務所]\s*$/.test(line)).join('')
-   .replace(/[＊*\s]/g,'').replace(/^[（(]空白[）)]$/,'');
-  return [{registrationSequence,kind,duration,targets}];
+  return [{registrationSequence,kind,duration:rightDuration(block),targets}];
  });
 }
+function parseOtherRights(text){
+ const mortgageAmounts=new Map(parseMortgages(text).map(item=>[item.registrationSequence,item.amount]));
+ return otherRightRecords(text).map(({block,registrationSequence,kind,targets})=>{
+  const rawParcels=rightFieldText(field(block,'共同擔保地號'),true),parcels=[];let section='';
+  for(const match of rawParcels.matchAll(/([\u3400-\u9fff0-9]{1,20}段)?\s*(\d{1,4})[-－](\d{4})/g)){
+   if(match[1])section=match[1];parcels.push((section?section+' ':'')+match[2].padStart(4,'0')+'-'+match[3]);
+  }
+  const creditRatio=rightFieldText(field(block,'債權額比例'),true).replace(/\s/g,'').replace(/(\d+)分之(\d+)/g,'$2／$1').replace(/^全部(?=\d)/,'全部 ');
+  return {registrationSequence,kind:kind.split('\n')[0].trim(),holder:ownerName(rightFieldText(field(block,'權利人'))),creditRatio,
+   amount:mortgageAmounts.get(registrationSequence)||'',duration:rightDuration(block),collateralParcels:parcels.length?[...new Set(parcels)].join('\n'):rawParcels,targets};
+ });
+}
+function reconcileOtherRights(direct,scanned){
+ const records=new Map(direct.map(item=>[item.registrationSequence,{...item}]));
+ for(const item of scanned){
+  const found=records.get(item.registrationSequence);if(!found){records.set(item.registrationSequence,{...item});continue;}
+  if(found.kind&&item.kind&&found.kind!==item.kind)continue;
+  for(const key of ['holder','creditRatio','amount','duration','collateralParcels'])if(!str(found[key]).trim())found[key]=item[key]||'';
+  if(!found.kind)found.kind=item.kind||'';
+ }
+ return [...records.values()];
+}
+const otherRightHeaders=['他項登記次序','他項登記權利人','債權額比例','擔保債權總金額','存續期間','共同擔保地號'];
+const otherRightValues=item=>['registrationSequence','holder','creditRatio','amount','duration','collateralParcels'].map(key=>str(item[key])||'—');
 function reconcileRightRecords(owner,image,key,detail){
  const direct=owner[key]||[],known=[...(owner.mortgages||[]),...(owner.surfaceRights||[])];
  const allowed=(image[key]||[]).filter(item=>!owner.mortgageSectionPresent||direct.some(record=>record.registrationSequence===item.registrationSequence)||(!known.some(record=>record.registrationSequence===item.registrationSequence)&&(owner.relatedMortgageRefs||[]).includes(item.registrationSequence)));
@@ -282,5 +313,5 @@ function commonCellSpans(items){
  return result;
 }
 const ownerColumnPercentages=[4,9,26,14,8,8,8,23];
-root.RegistryModel={legacyDraft,digits,clean,repairLabels,date,displayDate,ownerName,debtorName,compactNote,parseMortgages,mortgageNote,parseSurfaceRights,surfaceRightNote,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
+root.RegistryModel={legacyDraft,digits,clean,repairLabels,date,displayDate,ownerName,debtorName,compactNote,parseMortgages,mortgageNote,parseSurfaceRights,surfaceRightNote,parseOtherRights,reconcileOtherRights,otherRightHeaders,otherRightValues,commonCellSpans,ownerColumnPercentages,reason,address,fraction,registration,commonRefs,parseOwners,reconcile,groupOwners,summary};
 })(globalThis);
