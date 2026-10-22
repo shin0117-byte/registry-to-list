@@ -21,6 +21,8 @@ test('mortgages attach only to target ownership, retaining existing notes and on
 test('related rights link missing targets and amount formatting keeps maximum limit and decimals',()=>{
  const text=transcript(mortgage('0001','0002-000','新台幣１２３４５６７.８９元正','','最高限額抵押權'));
  const row=c.parsedOwners(text)[0];assert.equal(row.mortgages[0].amount,'最高限額新臺幣1,234,567.89元');
+ assert.equal(row.review.find(note=>note.startsWith('最高限額抵押權（')),'最高限額抵押權（登記次序：0002-000；金額：最高限額新臺幣1,234,567.89元）');
+ const merged=c.reconcileOwners([row],[row]);assert.equal(merged[0].review.filter(note=>note.includes('抵押權（')).length,1);
 });
 test('PDF mortgage values win OCR; missing amount alone can fall back and no duplicate notes appear',()=>{
  const direct=c.parsedOwners(transcript(two)),ocr=c.parsedOwners(transcript(two.replace('300,000','900,000')));

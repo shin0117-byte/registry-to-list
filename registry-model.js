@@ -112,7 +112,7 @@ function compactNote(value){
  }).filter(Boolean))].join('；');
 }
 function mortgageNote(item){
- return '抵押權（登記次序：'+item.registrationSequence+'；金額：'+(item.amount||'待確認')+'）';
+ return (item.kind||'抵押權')+'（登記次序：'+item.registrationSequence+'；金額：'+(item.amount||'待確認')+'）';
 }
 function mortgageRefs(value){
  const refs=new Set();
@@ -199,7 +199,7 @@ function reconcile(direct,scanned){
    if(!o.review.length)o.review=[...(image.review||[])];
    const mortgages=reconcileRightRecords(o,image,'mortgages','amount'),surfaceRights=reconcileRightRecords(o,image,'surfaceRights','duration');
    o.mortgages=mortgages;o.surfaceRights=surfaceRights;
-   o.review=[...new Set([...o.review.filter(note=>!note.startsWith('抵押權（登記次序：')&&!/^(?:區分|普通)?地上權（存續期間：/.test(note)),...mortgages.map(mortgageNote),...surfaceRights.map(surfaceRightNote)])];
+   o.review=[...new Set([...o.review.filter(note=>!/^(?:最高限額|普通)?抵押權（登記次序：/.test(note)&&!/^(?:區分|普通)?地上權（存續期間：/.test(note)),...mortgages.map(mortgageNote),...surfaceRights.map(surfaceRightNote)])];
    if(o.date)o.issues=o.issues.filter(x=>!x.startsWith('原因發生日期'));
   }else if(!candidates.length){merged.push({...image,review:[...(image.review||[])],issues:[...(image.issues||[])]});used.add(merged.length-1);}
  }
