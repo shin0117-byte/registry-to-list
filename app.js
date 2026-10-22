@@ -15,6 +15,7 @@ function addRow(data = [], metadata = {}) {
   const fullName=metadata.debtorName||RegistryModel.debtorName(note);
   if(fullName){name=fullName;metadata={...metadata,debtorName:fullName};}
   const checked = validateOwnerIdentity({name,id}); name=checked.name; id=checked.id;
+  note=RegistryModel.compactNote(note);
   const issues=[...(metadata.issues || [])];
   if(date && !RegistryModel.date(date))issues.push('原因發生日期無法確認：'+date);
   date=RegistryModel.displayDate(date);reason=RegistryModel.reason(reason);address=RegistryModel.address(address);
@@ -421,8 +422,8 @@ async function prepareWatermarkImages(images,progress) {
 }
 function cleanTranscriptText(text) { return RegistryModel.clean(text); }
 function parsedOwners(text) {
-  const section = isolateOwnershipSection(cleanTranscriptText(text));
-  return extractOwners(section,section.replace(/\s+/g,' ').trim());
+  const source=cleanTranscriptText(text);
+  return extractOwners(source,source.replace(/\s+/g,' ').trim());
 }
 function reconcileDocumentPages(pages = [], results = []) {
   const recognized = new Map(results.map(result => [result.pageKey,result.text]));
@@ -443,16 +444,16 @@ function reconcileDocumentPages(pages = [], results = []) {
   }
   return owners;
 }
-const BUSINESS_NOTE = /假扣押|假處分|查封|扣押|禁止處分|限制登記|限制事項|債權人|債務人|未辦繼承|列冊管理|列冊|國產署|國有財產署|標售|公同共有/;
+const BUSINESS_NOTE = /抵押權|假扣押|假處分|查封|扣押|禁止處分|限制登記|限制事項|債權人|債務人|未辦繼承|列冊管理|列冊|國產署|國有財產署|標售|公同共有/;
 function isBusinessNote(value) { return BUSINESS_NOTE.test(value) && !/不一致|採用OCR|請校對|影像補入|未辨識|地址辨識|謄本未載/.test(value); }
 function businessNoteClauses(text) {
  const cleaned=RegistryModel.clean(text).replace(/[（(]\s*空\s*白\s*[）)]/g,'').replace(/\b(?:[A-Z]\s?[A-Z0-9]|[0-9]\s?[A-Z])\b/g,'').replace(/\n\s*/g,'').trim();
- return cleaned.split(/(?=[（(](?:限制登記事項|一般註記事項)[）)])/).map(value=>value.replace(/^(?:其他登記事項|備註)\s*[：:]\s*/,'').replace(/[；;]+$/,'').trim()).filter(value=>value&&isBusinessNote(value));
+ return cleaned.split(/(?=[（(](?:限制登記事項|一般註記事項)[）)])/).map(value=>value.replace(/^(?:其他登記事項|備註)\s*[：:]\s*/,'').replace(/[；;]+$/,'').trim()).filter(value=>value&&isBusinessNote(value)).map(RegistryModel.compactNote);
 }
 function otherRightsNotes(text) {
   const source=cleanTranscriptText(text);
   const start=source.search(/土\s*地\s*他\s*項\s*權\s*利\s*部/);
-  return start<0 ? [] : [...new Set(businessNoteClauses(source.slice(start)))];
+  return start<0 ? [] : [...new Set(source.slice(start).split(/(?=[（(]\s*\d{4}\s*[）)]\s*登記次序：)/).filter(block=>!/權利種類：\s*(?:最高限額|普通)?抵押權/.test(block)).flatMap(businessNoteClauses))];
 }
 function registrationNotes(text, landOnly=false) {
   let source=cleanTranscriptText(text);
@@ -531,8 +532,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
   const mappedDistrict = await lookupDistrict(fields.section);
   if (mappedDistrict && (!fields.district || mappedDistrict.endsWith(fields.district))) fields.district = mappedDistrict;
   const ownershipSection = isolateOwnershipSection(cleanTranscriptText(ownerText));
-  const cleanOwners = ownershipSection.replace(/\r/g, '').replace(/[　]/g, ' ').replace(/\s+/g, ' ').trim();
-  let owners = reconciledOwners === null ? extractOwners(ownershipSection, cleanOwners) : reconciledOwners;
+  let owners = reconciledOwners === null ? parsedOwners(ownerText) : reconciledOwners;
   const localityDatabase = await loadLocalities();
   const roadDatabase = await loadRoads();
   const documentHasAddress = addressTexts.length > 0 || /住\s*[址阯]/.test(ownershipSection);
