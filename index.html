@@ -4,11 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>謄本轉清冊｜線上版</title>
-  <link rel="stylesheet" href="styles.css?v=20261021-xlsx7" />
+  <link rel="stylesheet" href="styles.css?v=20261109-multi1" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-mark">簿</span><span>謄本轉清冊 <small>線上版 · 10/22.4</small></span></div>
+    <div class="brand"><span class="brand-mark">簿</span><span>謄本轉清冊 <small>線上版 · 11/09.1</small></span></div>
     <div class="privacy"><span class="dot"></span>文件線上辨識</div>
     <div class="actions"><button id="saveBtn" class="ghost">儲存草稿</button><button id="printBtn" class="primary">匯出 A3 直式 PDF</button></div>
   </header>
@@ -59,6 +59,16 @@
 
       <section class="workspace">
         <p id="saveStatus" class="save-status" role="status">掃描完成及修改後會自動儲存於此瀏覽器。</p>
+        <section class="panel project-toolbar" aria-label="清冊模式">
+          <div class="project-toolbar-heading"><div class="mode-tabs" role="tablist" aria-label="清冊檢視"><button type="button" id="singleModeBtn" role="tab" aria-selected="true" aria-controls="singleRegistryView">單筆清冊</button><button type="button" id="multiModeBtn" role="tab" aria-selected="false" aria-controls="multiRegistryView">多筆土地總表</button></div><span id="projectLandCount" class="project-count">0 筆土地</span><button type="button" id="addLandBtn" class="secondary">＋ 新增土地</button></div>
+          <nav id="landTabs" class="land-tabs" aria-label="土地分頁"></nav>
+          <p class="hint">每個地號使用一份完整 PDF，可一次選取多份；也可從最近掃描紀錄加入多筆總表。各土地修改會自動保留。</p>
+        </section>
+        <section id="multiRegistryView" class="panel multi-registry" role="tabpanel" aria-labelledby="multiModeBtn" hidden>
+          <div class="section-heading"><div><p class="eyebrow">MULTI-PARCEL REGISTER</p><h2>多筆土地・共有人總表</h2></div><div class="table-actions"><button type="button" id="exportMultiPdfBtn" class="primary">匯出整份 PDF</button><button type="button" id="exportMultiExcelBtn" class="ghost">匯出整份 Excel</button></div></div>
+          <p id="multiSummary" class="multi-summary"></p><p id="multiNotice" class="hint"></p><button type="button" id="multiDemoBtn" class="secondary">看看兩筆土地的範例</button><div id="multiMatrix"></div><h3>各土地清冊與明細</h3><div id="multiLandCards" class="land-cards"></div>
+        </section>
+        <div id="singleRegistryView" role="tabpanel" aria-labelledby="singleModeBtn">
         <section class="panel metadata"><div class="section-heading"><div><p class="eyebrow">清冊基本資料</p><h2>土地資料</h2></div><button id="loadDemoBtn" class="text-btn">載入範例格式</button></div>
           <div class="form-grid"><label>縣市／行政區<input id="district" placeholder="例：桃園市龍潭區"></label><label>段別<input id="section" placeholder="例：北坑段"></label><label>地號<input id="parcel" placeholder="例：0798-0000"></label><label>總面積（m²）<input id="area" type="number" min="0" step="0.01"></label><label>公告現值（元/m²）<input id="value" type="number" min="0" step="1"></label><label>公告現值年期<input id="valuePeriod" placeholder="例：民國111年01月"></label><label>使用分區<input id="zoning" placeholder="例：國家公園區"></label><label>使用地類別<input id="landCategory" placeholder="例：農牧用地或（空白）"></label><label class="full">建號／補充資訊<input id="building" placeholder="例：建號、謄本日期或其他說明"></label></div>
         </section>
@@ -69,12 +79,13 @@
         </section>
         <section class="panel" id="otherRightsPanel" hidden><div class="section-heading"><h2>他項權利明細</h2></div><div id="otherRightsDetails"></div></section>
         <section class="panel registry-summary"><div class="section-heading"><h2>共有組別合計與核對</h2></div><p class="hint">依原謄本排序；相同組號為同一公同共有關係，共同持分與坪數在合計中只計一次。筆數與欄位待核對事項另列於此。</p><div id="registrySummary"></div></section>
+        </div>
       </section>
     </div>
   </main>
   <div id="toast" role="status"></div>
   <template id="rowTemplate"><tr><td class="serial"></td><td><textarea data-key="name" rows="1" placeholder="姓名"></textarea></td><td><span class="gender">—</span><input data-key="id" class="id-input" placeholder="身分證字號" title="僅供判定性別，不會寫入匯出檔"></td><td><textarea data-key="address" rows="2" placeholder="地址"></textarea></td><td><textarea data-key="numerator" rows="1" inputmode="numeric" placeholder="1">1</textarea></td><td class="slash">／</td><td><textarea data-key="denominator" rows="1" inputmode="numeric" placeholder="1">1</textarea></td><td class="share-area">0.00</td><td><textarea data-key="date" rows="1" placeholder="112.09.26"></textarea></td><td><textarea data-key="reason" rows="1" placeholder="買賣／繼承"></textarea></td><td><textarea data-key="note" rows="1" placeholder="備註"></textarea></td><td><button class="delete-row" title="刪除這筆">×</button></td></tr></template>
-  <script src="registry-model.js?v=20261022-rights4"></script><script src="cloud-config.js"></script><script src="cloud-ocr.js"></script><script src="billing-client.js?v=20261021-short16"></script>
-  <script src="scan-history.js?v=20261022-rights4"></script><script src="pdf-export.js?v=20261022-rights4"></script><script src="address-recovery.js?v=20261021-xlsx7"></script><script src="xlsx-export.js?v=20261022-rights4"></script><script src="app.js?v=20261022-rights4"></script>
+  <script src="registry-model.js?v=20261109-multi1"></script><script src="cloud-config.js"></script><script src="cloud-ocr.js"></script><script src="billing-client.js?v=20261021-short16"></script>
+  <script src="scan-history.js?v=20261109-multi1"></script><script src="pdf-export.js?v=20261109-multi1"></script><script src="address-recovery.js?v=20261021-xlsx7"></script><script src="xlsx-export.js?v=20261109-multi1"></script><script src="multi-registry.js?v=20261109-multi1"></script><script src="multi-registry-ui.js?v=20261109-multi1"></script><script src="app.js?v=20261109-multi1"></script>
 </body>
 </html>

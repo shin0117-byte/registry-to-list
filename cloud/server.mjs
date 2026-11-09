@@ -6,7 +6,7 @@ import {readFile} from 'node:fs/promises';
 import {resolve, extname} from 'node:path';
 import {timingSafeEqual} from 'node:crypto';
 import {pathToFileURL} from 'node:url';
-const files=new Set(['index.html','admin.html','admin.js','billing-client.js','app.js','registry-model.js','scan-history.js','pdf-export.js','xlsx-export.js','address-recovery.js','styles.css','cloud-config.js','cloud-ocr.js','land-sections.json','localities.json','roads.json','vendor/pdf.mjs','vendor/pdf.worker.mjs','vendor/pdfmake.min.js','vendor/NotoSansCJKtc-Regular.otf','vendor/exceljs.min.js','vendor/tesseract.min.js','vendor/worker.min.js','vendor/tesseract-core.wasm','vendor/tesseract-core.wasm.js','ocr-assets/chi_tra.traineddata.gz','ocr-assets/eng.traineddata.gz']);
+const files=new Set(['index.html','admin.html','admin.js','billing-client.js','app.js','registry-model.js','multi-registry.js','multi-registry-ui.js','scan-history.js','pdf-export.js','xlsx-export.js','address-recovery.js','styles.css','cloud-config.js','cloud-ocr.js','land-sections.json','localities.json','roads.json','vendor/pdf.mjs','vendor/pdf.worker.mjs','vendor/pdfmake.min.js','vendor/NotoSansCJKtc-Regular.otf','vendor/exceljs.min.js','vendor/tesseract.min.js','vendor/worker.min.js','vendor/tesseract-core.wasm','vendor/tesseract-core.wasm.js','ocr-assets/chi_tra.traineddata.gz','ocr-assets/eng.traineddata.gz']);
 const types={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.json':'application/json','.otf':'font/otf','.wasm':'application/wasm','.gz':'application/gzip'};
 const fail=(status,message)=>Object.assign(new Error(message),{status});
 async function readJson(req,limit){

@@ -1,6 +1,6 @@
 const $ = (s) => document.querySelector(s);
 const rows = $('#rows');
-const state = { files: [], ocrEngine: '', needsSourceRebuild:false,sourceFiles:[],otherRights:[],persistenceReady:false,savingPaused:false,unsaved:false,draftRevision:'',lastSavedContent:'' };
+const state = { files: [], ocrEngine: '', needsSourceRebuild:false,sourceFiles:[],otherRights:[],project:null,persistenceReady:false,savingPaused:false,unsaved:false,draftRevision:'',lastSavedContent:'' };
 const demo = [
   ['羅＊＊','','大溪區龍潭鄉三洽水字1243番地',1,9,'---.--.--','總登記','108.7.22未辦繼承列冊'],
   ['卓先生','','桃園市龍潭區三和里店湖一路22號',1,3,'080.01.29','買賣',''],
@@ -132,6 +132,7 @@ function updateAll() {
   $('#totalRatio').textContent = (summary.groups.some(g=>!g.valid)?'已確認持分小計 ':'持分合計 ')+summary.percent+'%　土地總面積 '+summary.landArea+' 坪'+(summary.complete?'':'（有未確認資料）');
   renderRegistrySummary(summary);
   renderOtherRights();
+  if(typeof RegistryMultiUI!=='undefined')RegistryMultiUI.render();
   autoSaveDraft();
 }
 function toast(text) { const t=$('#toast'); t.textContent=text; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
@@ -219,7 +220,7 @@ function saveDraft() {try{persistCurrentDraft();toast('目前清冊已儲存，�
 function restoreDraft() {
  try{
   const draft=typeof RegistryScanHistory!=='undefined'?recentScanStore().current():JSON.parse(localStorage.getItem('registry-draft'));if(!draft)return;
-  state.needsSourceRebuild=RegistryModel.legacyDraft(draft);state.sourceFiles=draft.sourceFiles||[];state.otherRights=draft.otherRights||[];state.draftRevision=draft.revision||'';
+  state.needsSourceRebuild=RegistryModel.legacyDraft(draft);state.sourceFiles=draft.sourceFiles||[];state.otherRights=draft.otherRights||[];state.project=draft.project||null;state.draftRevision=draft.revision||'';
   Object.entries(draft.fields||{}).forEach(([k,v])=>{const field=$('#'+k);if(field)field.value=v;});
   (draft.rows||[]).forEach(r=>addRow([r.name,r.id||'',r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r));
   if(draft.savedAt)showSavedStatus(draft);
@@ -261,6 +262,7 @@ async function exportExcel() {
  finally{button.disabled=state.needsSourceRebuild;button.textContent=label;}
 }
 async function exportPdf() {
+  if(state.project?.view==='multi'&&typeof RegistryMultiUI!=='undefined')return RegistryMultiUI.exportProject('pdf',$('#printBtn'));
   const button=$('#printBtn');button.disabled=true;const label=button.textContent;button.textContent='正在產生 PDF…';
   try{
     const snapshot=captureSnapshot();
@@ -270,9 +272,24 @@ async function exportPdf() {
   }catch(error){toast('PDF 產生失敗：'+error.message);}
   finally{button.disabled=false;button.textContent=label;}
 }
-function captureSnapshot() {
+function captureSingleSnapshot() {
   const fields=['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'];
   return {schemaVersion:2,needsSourceRebuild:state.needsSourceRebuild,sourceFiles:state.sourceFiles,otherRights:state.otherRights,fields:Object.fromEntries(fields.map(k=>[k,$('#'+k).value])),rows:getData()};
+}
+function captureSnapshot() {
+ const snapshot=captureSingleSnapshot();
+ if(typeof RegistryMulti!=='undefined'&&state.project){state.project=RegistryMulti.sync(state.project,snapshot);return {...snapshot,project:state.project};}
+ return snapshot;
+}
+function currentProject(){
+ const snapshot=captureSingleSnapshot();state.project=state.project?RegistryMulti.sync(state.project,snapshot):RegistryMulti.create(snapshot);return state.project;
+}
+function loadSingleLand(snapshot){
+ const paused=state.savingPaused;state.savingPaused=true;state.needsSourceRebuild=RegistryModel.legacyDraft(snapshot);state.sourceFiles=snapshot.sourceFiles||[];state.otherRights=snapshot.otherRights||[];
+ for(const key of ['district','section','parcel','area','value','valuePeriod','zoning','landCategory','building'])$('#'+key).value=snapshot.fields?.[key]||'';
+ rows.replaceChildren();for(const r of snapshot.rows||[])addRow([r.name,r.id,r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r);
+ state.files=[];const file=$('#sourceFile');if(file)file.value='';const list=$('#fileList');if(list)list.innerHTML='';
+ updateAll();state.savingPaused=paused;
 }
 function recentScanStore(){return RegistryScanHistory.createStore(localStorage);}
 function saveCompletedScan(){recentScanStore().add(captureSnapshot());renderRecentScans();}
@@ -282,7 +299,7 @@ function loadRecentScan(id){
     localStorage.setItem('registry-draft-before-reimport',JSON.stringify(captureSnapshot()));
     // Save first: if storage is unavailable, leave the visible current list unchanged.
     const saved=recentScanStore().saveCurrent(entry.snapshot,state.draftRevision);state.draftRevision=saved.revision;
-    state.savingPaused=true;state.sourceFiles=entry.snapshot.sourceFiles||[];state.otherRights=entry.snapshot.otherRights||[];state.needsSourceRebuild=RegistryModel.legacyDraft(entry.snapshot);rows.replaceChildren();
+    state.savingPaused=true;state.sourceFiles=entry.snapshot.sourceFiles||[];state.otherRights=entry.snapshot.otherRights||[];state.project=entry.snapshot.project||null;state.needsSourceRebuild=RegistryModel.legacyDraft(entry.snapshot);rows.replaceChildren();
     for(const [key,value] of Object.entries(entry.snapshot.fields))$('#'+key).value=value;
     for(const r of entry.snapshot.rows)addRow([r.name,r.id,r.address,r.numerator,r.denominator,r.date,r.reason,r.note],r);
     state.savingPaused=false;state.unsaved=false;state.lastSavedContent=JSON.stringify(captureSnapshot());updateAll();showSavedStatus(saved);toast('已載入清冊，不會重掃或扣點');
@@ -301,7 +318,7 @@ function renderRecentScans(){
       const load=document.createElement('button');load.type='button';load.textContent='載入清冊';load.onclick=()=>loadRecentScan(entry.id);
       const remove=document.createElement('button');remove.type='button';remove.textContent='刪除此紀錄';
       remove.onclick=()=>{if(confirm('只刪除此台瀏覽器的這筆掃描紀錄？不會刪除目前清冊。')){try{recentScanStore().remove(entry.id);renderRecentScans();}catch(e){toast(e.message);}}};
-      item.append(label,load,remove);list.append(item);
+      item.append(label,load);if(typeof RegistryMultiUI!=='undefined'){const add=document.createElement('button');add.type='button';add.className='text-btn';add.textContent='加入多筆總表';add.onclick=()=>{try{RegistryMultiUI.addSnapshots(entry.snapshot.project?.lands.map(land=>land.snapshot)||[entry.snapshot]);}catch(error){toast(error.message);}};item.append(add);}item.append(remove);list.append(item);
     }
   }catch(error){status.textContent='掃描紀錄讀取失敗：'+error.message;}
 }
@@ -316,7 +333,7 @@ function setupDesktopUpdater() {
   button.addEventListener('click', async () => { button.disabled = true; try { await window.desktopUpdater.install(); } catch (error) { button.disabled = false; text.textContent = `更新失敗：${error.message || '請稍後再試。'}`; } });
 }
 $('#addRowBtn').addEventListener('click',()=>addRow()); $('#area').addEventListener('input',updateAll); $('#saveBtn').addEventListener('click',saveDraft); $('#printBtn').addEventListener('click',exportPdf); $('#exportBtn').addEventListener('click',exportExcel);
-$('#loadDemoBtn').addEventListener('click',()=>{state.savingPaused=true;state.sourceFiles=[];state.otherRights=[];rows.innerHTML='';demo.forEach(addRow);state.savingPaused=false;updateAll();toast('已載入範例格式資料');});
+$('#loadDemoBtn').addEventListener('click',()=>{state.savingPaused=true;state.sourceFiles=[];state.otherRights=[];state.project=null;rows.innerHTML='';demo.forEach(addRow);state.savingPaused=false;updateAll();toast('已載入範例格式資料');});
 $('#sourceFile').addEventListener('change',(e)=>{state.files=[...e.target.files];$('#fileList').innerHTML=state.files.map(f=>`<div class="file-item">${escapeXml(f.name)}</div>`).join('');$('#ocrBtn').disabled=!state.files.length;});
 refreshCloudSetup();
 async function runOcr() {
@@ -326,6 +343,7 @@ async function runOcr() {
   try {
 
     const source = await collectSourceContent(state.files, mode, (current, total) => { setProgress((current / total) * 20, `正在分析第 ${current}/${total} 頁`); });
+    if(typeof RegistryMulti!=='undefined')validateProjectSource(source.pages);
     setOcrEngine('PDF 文字讀取');
     const ocrImages = source.images.filter(job => needsOcrForDocument(source.pages, job.pageKey));
     let ocrText = ''; const addressTexts = []; let pageResults = [];
@@ -341,7 +359,7 @@ async function runOcr() {
     if(reconciled&&typeof RegistryAddressRecovery!=='undefined')await RegistryAddressRecovery.recover(reconciled,source.pages,setProgress);
     const land=mode==='auto'?reconcileLandFields(source.directText,ocrText):null;
     if(land)land.otherRights=reconcileDocumentRights(source.pages,pageResults);
-    setProgress(96, '正在整理土地與權利人資料'); await applyExtractedData(ownerText, ownerText, addressTexts, reconciled, land); setProgress(100, '完成，目前清冊已儲存'); if(ocrImages.length) window.prepaid?.finish();
+    setProgress(96, '正在整理土地與權利人資料'); if(typeof RegistryMulti!=='undefined'&&source.pages.every(page=>String(page.fileKey).startsWith('pdf-')))await applyProjectDocuments(source.pages,pageResults,reconciled,mode);else await applyExtractedData(ownerText, ownerText, addressTexts, reconciled, land); setProgress(100, '完成，目前清冊已儲存'); if(ocrImages.length) window.prepaid?.finish();
   } catch (error) { setProgress(0, '未完成：' + error.message); toast(`文件處理未完成：${error.message || '請稍後再試。'}`); }
   finally { button.disabled = false; button.textContent = '讀取並自動帶入'; }
 }
@@ -428,6 +446,34 @@ async function prepareWatermarkImages(images,progress) {
     progress(20,'正在淡化紅色浮水印 '+(i+1)+'／'+images.length);
     images[i].blob=await fadeRedWatermarkBlob(images[i].blob);
   }
+}
+function validateProjectSource(pages){
+ const parcels=new Map();for(const page of pages){const fields=extractLandFields(page.directText||'');if(!fields.parcel)continue;if(!parcels.has(page.fileKey))parcels.set(page.fileKey,new Set());parcels.get(page.fileKey).add((fields.section||'')+'|'+fields.parcel);}
+ if([...parcels.values()].some(keys=>keys.size>1))throw new Error('同一份 PDF 含多個地號，請分成每地號一份 PDF 後再匯入；原清冊已保留');
+}
+async function applyProjectDocuments(pages,results,reconciled,mode){
+ const recognized=new Map(results.map(result=>[result.pageKey,result.text])),documents=new Map(),files=state.files.filter(file=>file.type==='application/pdf'||file.name.toLowerCase().endsWith('.pdf'));
+ for(const page of pages){if(!documents.has(page.fileKey))documents.set(page.fileKey,{direct:[],ocr:[]});const doc=documents.get(page.fileKey);doc.direct.push(page.directText||'');doc.ocr.push(recognized.get(page.pageKey)||'');}
+ const localities=await loadLocalities(),roads=await loadRoads(),snapshots=[],seen=new Set();
+ for(const [fileKey,doc] of documents){
+  const direct=doc.direct.join('\n'),ocr=doc.ocr.join('\n'),land=reconcileLandFields(mode==='ocr'?'':direct,ocr),fields=land.fields;
+  if(!fields.section||!fields.parcel)throw new Error('無法確認其中一份謄本的段別、地號，原清冊已保留');
+  const district=await lookupDistrict(fields.section);if(district&&(!fields.district||district.endsWith(fields.district)))fields.district=district;
+  const key=RegistryMulti.key(fields);if(seen.has(key))throw new Error('同一地號選取了多份謄本，請每個地號保留一份完整謄本');seen.add(key);
+  let owners=reconciled?reconciled.filter(owner=>owner.documentKey===fileKey):parsedOwners(chooseExtractionText(mode,direct,ocr));
+  if(!owners.length)throw new Error('其中一份謄本未找到權利人，原清冊已保留');
+  owners=groupCommonOwnership(owners.map(owner=>({...owner,address:extractAddress(owner.address||'',fields.district||'',localities,roads)})));
+  const output=owners.map(owner=>{
+   const checked=validateOwnerIdentity(owner),common=owner.common?'公同共有（'+owner.commonGroupLabel+'）':'';
+   return {...owner,name:formatOwnerName(checked.name,checked.id),id:checked.id,date:RegistryModel.displayDate(owner.date),reason:RegistryModel.reason(owner.reason),ocrImported:true,
+    note:RegistryModel.compactNote([...new Set([...land.review,...(owner.review||[]),common].filter(value=>value&&isBusinessNote(value)))].join('；'))};
+  });
+  snapshots.push({schemaVersion:2,needsSourceRebuild:false,fields:{...fields,building:fields.building||land.review.join('；')},rows:output,otherRights:land.otherRights,sourceFiles:[files[Number(String(fileKey).replace('pdf-',''))]?.name||fileKey]});
+ }
+ if(!snapshots.length)throw new Error('未找到土地資料，原清冊已保留');
+ const previous=captureSnapshot();localStorage.setItem('registry-draft-before-reimport',JSON.stringify(previous));
+ const project=RegistryMulti.upsert(currentProject(),snapshots);project.activeKey=project.lands.find(land=>RegistryMulti.key(land.snapshot.fields)===RegistryMulti.key(snapshots[0].fields)).key;if(snapshots.length>1)project.view='multi';
+ state.project=project;loadSingleLand(snapshots[0]);persistCurrentDraft(true);toast('已整理 '+snapshots.length+' 筆土地；可切換單筆清冊或多筆總表');
 }
 function cleanTranscriptText(text) { return RegistryModel.clean(text); }
 function parsedOwners(text) {
@@ -558,6 +604,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
   });
   owners = groupCommonOwnership(owners);
   if(!owners.length)throw new Error('未找到權利人，原清冊已保留');
+  const previousProject=typeof RegistryMulti!=='undefined'?currentProject():null;
   const differentLand=['district','section','parcel'].some(k=>fields[k]&&$('#'+k).value&&fields[k]!==$('#'+k).value);
   const differentFile=state.sourceFiles.length&&state.files.length&&state.sourceFiles.join('|')!==state.files.map(f=>f.name).join('|');
   replaceRecognizedRows(differentLand||differentFile);
@@ -574,6 +621,7 @@ async function applyExtractedData(landText, ownerText, addressTexts = [], reconc
     addRow([owner.name,owner.id,owner.address,owner.numerator,owner.denominator,owner.date,owner.reason,note],
       {...owner,relatedShareTypes:owner.relatedShareTypes || [],ocrImported:true});
   });
+  if(previousProject){const snapshot=captureSingleSnapshot();state.project=RegistryMulti.upsert(previousProject,[snapshot]);state.project.activeKey=state.project.lands.find(land=>RegistryMulti.key(land.snapshot.fields)===RegistryMulti.key(snapshot.fields)).key;}
   state.savingPaused=false;
   updateAll();
   persistCurrentDraft(true);
@@ -700,6 +748,7 @@ function groupCommonOwnership(owners) { return RegistryModel.groupOwners(owners)
 function extractLabelledOwners(text) { return RegistryModel.parseOwners(text,registrationNotes); }
 $('#ocrBtn').addEventListener('click', runOcr);
 
+if(typeof RegistryMultiUI!=='undefined')RegistryMultiUI.init({project:currentProject,set:project=>{state.project=project;},load:loadSingleLand,save:()=>{updateAll();persistCurrentDraft();},date:exportDateSuffix,message:toast});
 restoreDraft();
 updateAll();
 renderRecentScans();

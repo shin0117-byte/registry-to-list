@@ -4,10 +4,10 @@ const text=v=>String(v??'');
 const headers=['次序','姓名','地址','持分','持分坪數','原因發生日期\n（民國）','登記原因','備註／組號'];
 const border={top:{style:'thin',color:{argb:'FF9BAEB5'}},left:{style:'thin',color:{argb:'FF9BAEB5'}},bottom:{style:'thin',color:{argb:'FF9BAEB5'}},right:{style:'thin',color:{argb:'FF9BAEB5'}}};
 function lines(value,width){return text(value).split('\n').reduce((n,line)=>n+Math.max(1,Math.ceil([...line].reduce((sum,c)=>sum+(/[\u3400-\u9fff\uff00-\uffef]/.test(c)?2:1),0)/Math.max(1,width-1))),0);}
-function build(snapshot,Excel){
+function build(snapshot,Excel,existing=null,sheetName='清冊'){
  const model=root.RegistryModel,fields=snapshot.fields,items=snapshot.rows,area=Number(fields.area)||0,summary=model.summary(items,area);
- const book=new Excel.Workbook();book.creator='謄本轉清冊';book.title=[fields.district,fields.section,fields.parcel].map(text).join('')+'地號清冊';
- const sheet=book.addWorksheet('清冊',{views:[{showGridLines:false,state:'frozen',ySplit:6}],pageSetup:{paperSize:8,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.39,right:.39,top:.39,bottom:.39,header:.15,footer:.2},printTitlesRow:'6:6'}});
+ const book=existing||new Excel.Workbook();if(!existing){book.creator='謄本轉清冊';book.title=[fields.district,fields.section,fields.parcel].map(text).join('')+'地號清冊';}
+ const sheet=book.addWorksheet(sheetName,{views:[{showGridLines:false,state:'frozen',ySplit:6}],pageSetup:{paperSize:8,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:.39,right:.39,top:.39,bottom:.39,header:.15,footer:.2},printTitlesRow:'6:6'}});
  sheet.headerFooter.oddFooter='&C第 &P／&N 頁';
  // Keep serial, owner name and share compact; give the released space to addresses and notes.
  const widths=[3.5,7,29.5,11,8,8,8,25].map(n=>147*n/100);sheet.columns=widths.map(width=>({width}));
@@ -75,6 +75,29 @@ function build(snapshot,Excel){
  sheet.pageSetup.printArea='A1:H'+sheet.rowCount;
  return book;
 }
+function buildProject(project,Excel){
+ if(!project.lands.length)throw new Error('請先加入土地清冊');
+ const book=new Excel.Workbook();book.creator='謄本轉清冊';book.title='多筆土地共有清冊';
+ const report=root.RegistryMulti.blocks(project);
+ for(const [index,block] of report.blocks.entries()){
+  const sheet=book.addWorksheet('共有人總表'+(index?String(index+1):''),{pageSetup:{paperSize:8,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'3:3',margins:{left:.39,right:.39,top:.39,bottom:.39,header:.15,footer:.2}}});
+  sheet.columns=block.widths.map(width=>({width:144*width/100}));sheet.headerFooter.oddFooter='&C第 &P／&N 頁';
+  const title=sheet.addRow(['多筆土地共有清冊｜土地對照 '+(index+1)+'／'+report.blocks.length]);sheet.mergeCells(title.number,1,title.number,8);title.height=30;title.getCell(1).font={name:'Microsoft JhengHei',size:16,bold:true};title.getCell(1).alignment={horizontal:'center',vertical:'middle'};
+  const notice=sheet.addRow([root.RegistryMulti.notice]);sheet.mergeCells(notice.number,1,notice.number,8);notice.height=42;notice.getCell(1).font={name:'Microsoft JhengHei',size:10};notice.getCell(1).alignment={wrapText:true,vertical:'top'};
+  const headers=sheet.addRow(block.headers);headers.height=64;
+  headers.eachCell(cell=>{cell.font={name:'Microsoft JhengHei',size:10,bold:true};cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE4EFED'}};cell.border=border;});
+  for(const values of block.rows){
+   const row=sheet.addRow(values);row.eachCell((cell,column)=>{cell.font={name:'Microsoft JhengHei',size:10.5};cell.numFmt='@';cell.alignment={wrapText:true,vertical:'top',horizontal:column>=4?'right':'left'};cell.border=border;});
+   row.height=Math.min(409,Math.max(30,...values.map((value,column)=>lines(value,sheet.getColumn(column+1).width)*15+8)));
+  }
+  sheet.pageSetup.printArea='A1:'+String.fromCharCode(64+block.headers.length)+sheet.rowCount;
+ }
+ for(const [index,land] of project.lands.entries()){
+  const name=(String(index+1)+'_'+(land.snapshot.fields.section||'土地')+(land.snapshot.fields.parcel||'')).replace(/[\\/*?:[\]]/g,'_').slice(0,31);
+  build(land.snapshot,Excel,book,name);
+ }
+ return book;
+}
 let loading;
 async function engine(){
  if(!loading)loading=(async()=>{
@@ -83,9 +106,9 @@ async function engine(){
  })().catch(error=>{loading=null;throw error;});return loading;
 }
 async function download(snapshot,filename){
- const Excel=await engine(),book=build(snapshot,Excel),bytes=await book.xlsx.writeBuffer();
+ const Excel=await engine(),book=snapshot.multiProject?buildProject(snapshot.multiProject,Excel):build(snapshot,Excel),bytes=await book.xlsx.writeBuffer();
  const blob=new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
-root.RegistryExcel={build,download};
+root.RegistryExcel={build,buildProject,download,downloadProject:(project,filename)=>download({multiProject:project},filename)};
 })(globalThis);

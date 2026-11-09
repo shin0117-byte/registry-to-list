@@ -53,6 +53,19 @@ function definition(snapshot){
  return {pageSize:'A3',pageOrientation:'portrait',pageMargins:[24,28,24,36],defaultStyle:{font:'RegistryCJK',fontSize:10.5,lineHeight:1.2,color:'#17212b'},info:{title,creator:'謄本轉清冊'},content,
   footer:(current,total)=>({text:'第 '+current+'／'+total+' 頁',alignment:'center',fontSize:9,margin:[0,8,0,0]})};
 }
+function projectDefinition(project){
+ if(!project.lands.length)throw new Error('請先加入土地清冊');
+ const report=root.RegistryMulti.blocks(project),doc=definition(project.lands[0].snapshot),content=[];
+ for(const [index,block] of report.blocks.entries()){
+  const available=841.89-48-block.headers.length*8-(block.headers.length+1)*.5;
+  content.push({text:'多筆土地共有清冊',fontSize:16,bold:true,alignment:'center',margin:[0,0,0,8],...(index?{pageBreak:'before'}:{})},
+   {text:'共 '+report.landCount+' 筆土地、'+report.people.length+' 列共有人對照｜第 '+(index+1)+' 組土地對照',margin:[0,0,0,6]},
+   {text:root.RegistryMulti.notice,fontSize:9,margin:[0,0,0,10]},
+   {table:{headerRows:1,widths:block.widths.map(n=>available*n/100),body:[block.headers.map(value=>({text:value,alignment:'center',fillColor:'#e4efed',bold:true})),...block.rows.map(row=>row.map((value,column)=>({text:wrap(value),alignment:column>=3?'right':'left'})))],dontBreakRows:false},layout});
+ }
+ for(const land of project.lands){const detail=definition(land.snapshot).content;content.push({...detail[0],pageBreak:'before'},...detail.slice(1));}
+ doc.content=content;doc.info={title:'多筆土地共有清冊',creator:'謄本轉清冊'};return doc;
+}
 let loading;
 async function engine(){
  if(!loading)loading=(async()=>{
@@ -65,9 +78,9 @@ async function engine(){
  return loading;
 }
 async function download(snapshot,filename){
- const pdf=await engine(),doc=definition(snapshot);
+ const pdf=await engine(),doc=snapshot.multiProject?projectDefinition(snapshot.multiProject):definition(snapshot);
  const blob=await new Promise((resolve,reject)=>{try{pdf.createPdf(doc).getBlob(resolve);}catch(error){reject(error);}});
  const url=URL.createObjectURL(blob),link=document.createElement('a');link.href=url;link.download=filename;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
-root.RegistryPdf={definition,download};
+root.RegistryPdf={definition,projectDefinition,download,downloadProject:(project,filename)=>download({multiProject:project},filename)};
 })(globalThis);
