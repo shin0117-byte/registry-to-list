@@ -40,7 +40,7 @@ function render(){
  el('landTabs').replaceChildren();
  p.lands.forEach((land,index)=>{const b=document.createElement('button');b.type='button';b.className='land-tab';b.textContent=(index+1)+'. '+root.RegistryMulti.label(land.snapshot.fields);b.setAttribute('aria-pressed',String(land.key===p.activeKey&&!multi));b.onclick=()=>activate(land.key);el('landTabs').append(b);});
  el('projectLandCount').textContent=p.lands.length+' 筆土地';
- el('multiSummary').textContent=p.lands.length?'共 '+p.lands.length+' 筆土地、'+report.people.length+' 列共有人對照；'+report.uncertain+' 列需核對身分。':'加入多筆謄本，或從最近掃描紀錄加入已完成的清冊。';
+ el('multiSummary').textContent=p.lands.length?'共 '+p.lands.length+' 筆土地、'+report.people.length+' 列姓名彙整'+(report.unnamed?'；'+report.unnamed+' 列姓名待補。':'。'):'加入多筆謄本，或從最近掃描紀錄加入已完成的清冊。';
  el('multiDemoBtn').hidden=p.lands.length>0;
  el('multiMatrix').innerHTML=report.blocks.map((block,index)=>'<div class="matrix-block"><h3>土地對照 '+(index+1)+'／'+report.blocks.length+'</h3><div class="table-wrap"><table class="matrix-table"><colgroup>'+block.widths.map(n=>'<col style="width:'+n+'%">').join('')+'</colgroup><thead><tr>'+block.headers.map(h=>'<th>'+escape(h).replace(/\n/g,'<br>')+'</th>').join('')+'</tr></thead><tbody>'+block.rows.map(row=>'<tr>'+row.map((value,col)=>'<td'+(col>=3?' class="matrix-number"':'')+'>'+escape(value).replace(/\n/g,'<br>')+'</td>').join('')+'</tr>').join('')+'</tbody></table></div></div>').join('');
  el('multiLandCards').replaceChildren();

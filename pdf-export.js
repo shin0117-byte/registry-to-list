@@ -59,7 +59,7 @@ function projectDefinition(project){
  for(const [index,block] of report.blocks.entries()){
   const available=841.89-48-block.headers.length*8-(block.headers.length+1)*.5;
   content.push({text:'多筆土地共有清冊',fontSize:16,bold:true,alignment:'center',margin:[0,0,0,8],...(index?{pageBreak:'before'}:{})},
-   {text:'共 '+report.landCount+' 筆土地、'+report.people.length+' 列共有人對照｜第 '+(index+1)+' 組土地對照',margin:[0,0,0,6]},
+   {text:'共 '+report.landCount+' 筆土地、'+report.people.length+' 列姓名彙整｜第 '+(index+1)+' 組土地對照',margin:[0,0,0,6]},
    {text:root.RegistryMulti.notice,fontSize:9,margin:[0,0,0,10]},
    {table:{headerRows:1,widths:block.widths.map(n=>available*n/100),body:[block.headers.map(value=>({text:value,alignment:'center',fillColor:'#e4efed',bold:true})),...block.rows.map(row=>row.map((value,column)=>({text:wrap(value),alignment:column>=3?'right':'left'})))],dontBreakRows:false},layout});
  }

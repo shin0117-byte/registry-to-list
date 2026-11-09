@@ -23,13 +23,13 @@ function upsert(project,snapshots){
  return p;
 }
 function matrix(project){
- const model=root.RegistryModel,people=[],lookup=new Map();let uncertain=0;
+ const model=root.RegistryModel,people=[],lookup=new Map();let unnamed=0;
  for(const [landIndex,land] of project.lands.entries())for(const [rowIndex,row] of land.snapshot.rows.entries()){
-  const id=String(row.id||'').replace(/\s/g,'').toUpperCase(),name=model.ownerName(row.name),address=model.address(row.address);
-  const full=/^[A-Z][12]\d{8}$/.test(id),masked=/^[A-Z][12][A-Z0-9*＊]{8}$/.test(id)&&/[*＊]/.test(id)&&name&&address;
-  const identity=full?'id:'+id:masked?JSON.stringify(['masked',id,name,address]):'separate:'+landIndex+':'+rowIndex;
+  const name=model.ownerName(row.name).split(/住(?=[＊*\d])|住址[：:]|統一編號[：:]|出生日期[：:]|當期申報地價[：:]|前次移轉現值/)[0].normalize('NFKC'),address=model.address(row.address);
+  const named=Boolean(name&&name!=='姓名待確認');
+  const identity=named?'name:'+name:'separate:'+landIndex+':'+rowIndex;
   let person=lookup.get(identity);
-  if(!person){person={name:name||'姓名待確認',address:address||'—',addresses:[],uncertain:!full,cells:project.lands.map(()=>[])};lookup.set(identity,person);people.push(person);if(!full)uncertain++;}
+  if(!person){person={name:name||'姓名待確認',address:address||'—',addresses:[],unnamed:!named,cells:project.lands.map(()=>[])};lookup.set(identity,person);people.push(person);if(!named)unnamed++;}
   if(address&&!person.addresses.includes(address))person.addresses.push(address);
   person.address=person.addresses.join('\n')||'—';person.cells[landIndex].push(row);
  }
@@ -54,7 +54,7 @@ function matrix(project){
   });
   return {...person,cells,total:invalid?'持分待確認':areaMissing?'面積待確認':hasCommon?'含公同共有':total.toFixed(2)};
  });
- return {people:reports,uncertain,landCount:project.lands.length};
+ return {people:reports,unnamed,landCount:project.lands.length};
 }
 function blocks(project){
  const report=matrix(project),output=[];
@@ -63,11 +63,11 @@ function blocks(project){
   const mixedDistricts=new Set(project.lands.map(land=>land.snapshot.fields.district||'')).size>1;
   const heading=land=>[mixedDistricts?land.snapshot.fields.district:'',land.snapshot.fields.section,land.snapshot.fields.parcel].filter(Boolean).join('\n');
   const headers=['次序','姓名','地址',...lands.flatMap(land=>[heading(land)+'\n持分',heading(land)+'\n坪數']),'個別坪數合計\n（全部土地）'];
-  const rows=report.people.map((person,index)=>[String(index+1),person.name+(person.uncertain?'＊':''),person.address,...person.cells.slice(i,i+2).flatMap(cell=>[cell.share,cell.area]),person.total]);
+  const rows=report.people.map((person,index)=>[String(index+1),person.name,person.address,...person.cells.slice(i,i+2).flatMap(cell=>[cell.share,cell.area]),person.total]);
   output.push({headers,rows,widths:lands.length===2?[4,11,31,12,9,12,9,12]:[5,13,36,17,12,17]});
  }
  return {...report,blocks:output};
 }
-const notice='＊遮碼資料相符者暫列同一候選，仍待人工核對；無法關聯者分列。公同共有坪數標示「共同」，不列入個人跨土地合計。';
+const notice='總表依相同姓名合併，不同地址一併保留；各土地原始登記詳後附清冊。公同共有坪數標示「共同」，不列入個人跨土地合計。';
 root.RegistryMulti={single,key,label,hasData,empty,create,sync,upsert,matrix,blocks,notice};
 })(globalThis);
