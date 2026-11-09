@@ -47,6 +47,10 @@ function address(value){
  text=repairLabels(text).replace(/^\s*住[。．.]*址[：:]?/,'');
  text=text.split(/管理者[：:]|(?:統一編號|出生日期|權狀字號|當期申報|登記原因|權利範圍|原因發生日期|其他登記事項|登記次序)[：:]?/)[0];
  text=text.replace(/\s/g,'').replace(/[＊*]+$/,'');
+ // Paper stamps appended after a real address are not part of the postal address.
+ if(/^[\u3400-\u9fff]{0,24}地政事務所(?:謄本用紙|謄本專用紙|專用紙|用紙)[：:。．.]*$/.test(text))return '';
+ text=text.replace(/^(.*(?:號|樓|室|番地|信箱)(?:之[\d一二三四五六七八九十百]+)?)[\u3400-\u9fff]{0,24}地政事務所(?:謄本用紙|謄本專用紙|專用紙|用紙)?[：:。．.]*$/,'$1');
+ text=text.replace(/(?:土地登記)?(?:謄本用紙|謄本專用紙|本謄本列印完畢)[：:。．.]*$/,'');
  text=text.replace(/((?:號|樓)(?:之[\d一二三四五六七八九十]+)?)[\u4e00-\u9fff]{2,16}段\d{1,4}[-－]\d{4}地號.*$/,'$1');
  text=text.replace(/((?:號|樓)(?:之\d+)?)(?:[A-Z]{2}|[A-Z]\d|\d[A-Z])$/,'$1');
  return /^[（(]空白[）)]$/.test(text)||text==='—'?'':text;

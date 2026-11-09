@@ -116,3 +116,17 @@ test('restriction debtor name directly replaces owner name within its own record
  const merged=M.reconcile(M.parseOwners(row(1,'0001','李＊＊')),image);
  assert.equal(merged[0].name,'張完整');
 });
+
+test('paper stamps following a complete address are removed without losing house or floor suffixes',()=>{
+ const address='台中縣外埔鄉永美村12鄰山脚巷00弄105號';
+ assert.equal(M.address(address+'苗栗縣通霄地政事務所謄本用紙'),address);
+ assert.equal(M.address(address+'\n苗栗縣通霄地政事務所\n謄本用紙'),address);
+ assert.equal(M.address(address+'十樓之3苗栗縣通霄地政事務所謄本用紙'),address+'十樓之3');
+ assert.equal(M.address(address+'屏東縣枋寮地政事務所'),address);
+});
+test('paper-stamp-only input is empty while legitimate office and overseas addresses remain',()=>{
+ assert.equal(M.address('苗栗縣通霄地政事務所謄本用紙'),'');
+ assert.equal(M.address('苗栗縣通霄地政事務所苗栗縣通霄鎮測試路1號'),'苗栗縣通霄地政事務所苗栗縣通霄鎮測試路1號');
+ assert.equal(M.address('美國德州維多利亞市櫻桃石圓環505號'),'美國德州維多利亞市櫻桃石圓環505號');
+ assert.equal(M.address('台中縣外埔鄉測試路105號謄本用紙'),'台中縣外埔鄉測試路105號');
+});

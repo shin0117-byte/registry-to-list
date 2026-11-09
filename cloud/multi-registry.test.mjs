@@ -63,3 +63,10 @@ test('multi-file import prepares each parcel independently, persists once, and r
  assert.equal(result.lands.length,2);assert.equal(result.lands[0].snapshot.fields.area,'100');assert.equal(result.lands[1].snapshot.fields.area,'200');assert.equal(result.lands[0].snapshot.rows.length,1);assert.equal(vm.runInContext('saves',c),1);
  assert.throws(()=>c.validateProjectSource([{...pages[0]},{...pages[1],fileKey:'pdf-0'}]),/每地號一份/);
 });
+
+test('address stamp cleanup allows the correct name-and-address consolidation without changing raw records',()=>{
+ const clean='苗栗縣通霄鎮測試路105號';
+ const p=project([land('1',[row({id:'',address:clean+'苗栗縣通霄地政事務所謄本用紙'})]),land('2',[row({id:'',address:clean})])]);
+ const report=M.matrix(p);assert.equal(report.people.length,1);assert.equal(report.people[0].address,clean);
+ assert.ok(p.lands[0].snapshot.rows[0].address.includes('謄本用紙'));
+});
