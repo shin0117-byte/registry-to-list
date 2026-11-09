@@ -67,16 +67,13 @@ function matrix(project){
  return {people:reports,unnamed,landCount:project.lands.length};
 }
 function blocks(project){
- const report=matrix(project),output=[];
- for(let i=0;i<project.lands.length;i+=2){
-  const lands=project.lands.slice(i,i+2);
-  const mixedDistricts=new Set(project.lands.map(land=>land.snapshot.fields.district||'')).size>1;
-  const heading=land=>[mixedDistricts?land.snapshot.fields.district:'',land.snapshot.fields.section,land.snapshot.fields.parcel].filter(Boolean).join('\n');
-  const headers=['次序','姓名','地址',...lands.flatMap(land=>[heading(land)+'\n持分',heading(land)+'\n坪數']),'個別坪數合計\n（全部土地）'];
-  const rows=report.people.map((person,index)=>[String(index+1),person.name,person.address,...person.cells.slice(i,i+2).flatMap(cell=>[cell.share,cell.area]),person.total]);
-  output.push({headers,rows,widths:lands.length===2?[4,11,31,12,9,12,9,12]:[5,13,36,17,12,17]});
- }
- return {...report,blocks:output};
+ const report=matrix(project),lands=project.lands;if(!lands.length)return {...report,blocks:[]};
+ const mixedDistricts=new Set(lands.map(land=>land.snapshot.fields.district||'')).size>1;
+ const heading=land=>[mixedDistricts?land.snapshot.fields.district:'',land.snapshot.fields.section,land.snapshot.fields.parcel].filter(Boolean).join('\n');
+ const headers=['次序','姓名','地址',...lands.flatMap(land=>[heading(land)+'\n持分',heading(land)+'\n坪數']),'個別坪數合計\n（全部土地）'];
+ const rows=report.people.map((person,index)=>[String(index+1),person.name,person.address,...person.cells.flatMap(cell=>[cell.share,cell.area]),person.total]);
+ const widths=lands.length===1?[5,13,36,17,12,17]:lands.length===2?[4,11,31,12,9,12,9,12]:[3,9,25,...lands.flatMap(()=>[30/lands.length,24/lands.length]),9];
+ return {...report,blocks:[{headers,rows,widths}]};
 }
 const notice='姓名相同，且地址或身分證字號至少一項相同才合併；不同地址一併保留，空白欄位不作比對；各土地原始登記詳後附清冊。公同共有坪數標示「共同」，不列入個人跨土地合計。';
 root.RegistryMulti={single,key,label,hasData,empty,create,sync,upsert,matrix,blocks,notice};

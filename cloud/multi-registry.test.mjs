@@ -34,10 +34,10 @@ test('missing share and missing land area never become a false zero or NaN',()=>
  const invalid=M.matrix(project([land('1',[row({denominator:'0'})])])).people[0];assert.equal(invalid.cells[0].area,'持分待確認');assert.equal(invalid.total,'持分待確認');
  assert.equal(M.matrix(project([land('1',[row()], '')])).people[0].total,'面積待確認');
 });
-test('more than two parcels form additional comparison blocks, rather than widening A3 pages',()=>{
- const report=M.blocks(project(Array.from({length:5},(_,i)=>land(String(i)))));assert.equal(report.blocks.length,3);assert.equal(report.blocks[0].headers.length,8);assert.equal(report.blocks[2].headers.length,6);
- for(const block of report.blocks)assert.equal(block.widths.reduce((a,b)=>a+b,0),100);
+test('all selected parcels stay in the same comparison block, including three and five parcels',()=>{
+ for(const count of [1,2,3,5]){const report=M.blocks(project(Array.from({length:count},(_,i)=>land(String(i)))));assert.equal(report.blocks.length,1);assert.equal(report.blocks[0].headers.length,4+count*2);assert.equal(report.blocks[0].rows[0].length,4+count*2);assert.ok(Math.abs(report.blocks[0].widths.reduce((a,b)=>a+b,0)-100)<.00001);}
 });
+
 test('draft and scan history retain all land snapshots and views without recursive projects or secrets',()=>{
  const data=new Map(),storage={getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,v)};const p=project([land('1'),land('2')]);p.view='multi';
  const snapshot={...p.lands[0].snapshot,project:p,cloudAccessCode:'must-not-store'};const store=c.RegistryScanHistory.createStore(storage,()=> 'revision',()=>1);store.saveCurrent(snapshot,'');store.add(snapshot);
@@ -51,7 +51,8 @@ test('XLSX contains summary and separate A3 land sheets, keeping remarks and rig
  const p=project([land('0001-0000'),land('0002-0000')]),book=globalThis.RegistryExcel.buildProject(p,Excel),loaded=new Excel.Workbook();await loaded.xlsx.load(await book.xlsx.writeBuffer());
  assert.equal(loaded.worksheets.length,3);assert.equal(loaded.worksheets[0].name,'共有人總表');assert.equal(loaded.worksheets[1].getCell('H7').value,'原備註');
  for(const sheet of loaded.worksheets){assert.equal(sheet.pageSetup.orientation,'portrait');assert.equal(sheet.pageSetup.paperSize,8);}
- const larger=globalThis.RegistryExcel.buildProject(project(Array.from({length:5},(_,i)=>land(String(i)))),Excel);assert.equal(larger.worksheets.length,8);
+ const larger=globalThis.RegistryExcel.buildProject(project(Array.from({length:5},(_,i)=>land(String(i)))),Excel);assert.equal(larger.worksheets.length,6);assert.match(larger.worksheets[0].pageSetup.printArea,/N/);
+ const three=project([land('0001-0000'),land('0002-0000'),land('0003-0000')]);const doc=c.RegistryPdf.projectDefinition(three),table=doc.content.find(item=>item.table).table;assert.equal(table.widths.length,10);assert.ok(table.body[0].some(cell=>cell.text.includes('0003-0000')));assert.equal(doc.content.filter(item=>item.pageBreak==='before').length,3);
 });
 test('multi-file import prepares each parcel independently, persists once, and rejects mixed parcels within one PDF',async()=>{
  const transcript=(parcel,area)=>`測試縣測試鄉測試段${parcel}地號\n土地標示部\n面積：${area}平方公尺\n土地所有權部\n（0001）登記次序：0001\n所有權人：測試＊＊\n統一編號：A123456789\n住址：測試縣測試鄉測試路1號\n權利範圍：1/1\n登記原因：買賣\n原因發生日期：民國115年01月01日`;

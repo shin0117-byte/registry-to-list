@@ -82,15 +82,15 @@ function buildProject(project,Excel){
  for(const [index,block] of report.blocks.entries()){
   const sheet=book.addWorksheet('共有人總表'+(index?String(index+1):''),{pageSetup:{paperSize:8,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,printTitlesRow:'3:3',margins:{left:.39,right:.39,top:.39,bottom:.39,header:.15,footer:.2}}});
   sheet.columns=block.widths.map(width=>({width:144*width/100}));sheet.headerFooter.oddFooter='&C第 &P／&N 頁';
-  const title=sheet.addRow(['多筆土地共有清冊｜土地對照 '+(index+1)+'／'+report.blocks.length]);sheet.mergeCells(title.number,1,title.number,8);title.height=30;title.getCell(1).font={name:'Microsoft JhengHei',size:16,bold:true};title.getCell(1).alignment={horizontal:'center',vertical:'middle'};
-  const notice=sheet.addRow([root.RegistryMulti.notice]);sheet.mergeCells(notice.number,1,notice.number,8);notice.height=42;notice.getCell(1).font={name:'Microsoft JhengHei',size:10};notice.getCell(1).alignment={wrapText:true,vertical:'top'};
+  const title=sheet.addRow(['多筆土地共有清冊｜全部地號對照']);sheet.mergeCells(title.number,1,title.number,block.headers.length);title.height=30;title.getCell(1).font={name:'Microsoft JhengHei',size:16,bold:true};title.getCell(1).alignment={horizontal:'center',vertical:'middle'};
+  const notice=sheet.addRow([root.RegistryMulti.notice]);sheet.mergeCells(notice.number,1,notice.number,block.headers.length);notice.height=42;notice.getCell(1).font={name:'Microsoft JhengHei',size:10};notice.getCell(1).alignment={wrapText:true,vertical:'top'};
   const headers=sheet.addRow(block.headers);headers.height=64;
   headers.eachCell(cell=>{cell.font={name:'Microsoft JhengHei',size:10,bold:true};cell.alignment={horizontal:'center',vertical:'middle',wrapText:true};cell.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFE4EFED'}};cell.border=border;});
   for(const values of block.rows){
    const row=sheet.addRow(values);row.eachCell((cell,column)=>{cell.font={name:'Microsoft JhengHei',size:10.5};cell.numFmt='@';cell.alignment={wrapText:true,vertical:'top',horizontal:column>=4?'right':'left'};cell.border=border;});
    row.height=Math.min(409,Math.max(30,...values.map((value,column)=>lines(value,sheet.getColumn(column+1).width)*15+8)));
   }
-  sheet.pageSetup.printArea='A1:'+String.fromCharCode(64+block.headers.length)+sheet.rowCount;
+  sheet.pageSetup.printArea='A1:'+sheet.getColumn(block.headers.length).letter+sheet.rowCount;
  }
  for(const [index,land] of project.lands.entries()){
   const name=(String(index+1)+'_'+(land.snapshot.fields.section||'土地')+(land.snapshot.fields.parcel||'')).replace(/[\\/*?:[\]]/g,'_').slice(0,31);

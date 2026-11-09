@@ -57,11 +57,14 @@ function projectDefinition(project){
  if(!project.lands.length)throw new Error('請先加入土地清冊');
  const report=root.RegistryMulti.blocks(project),doc=definition(project.lands[0].snapshot),content=[];
  for(const [index,block] of report.blocks.entries()){
-  const available=841.89-48-block.headers.length*8-(block.headers.length+1)*.5;
+  const padding=block.headers.length>10?2:block.headers.length>8?3:4;
+  const available=841.89-48-block.headers.length*padding*2-(block.headers.length+1)*.5,cellWidths=block.widths.map(n=>available*n/100);
+  const matrixLayout={...layout,paddingLeft:()=>padding,paddingRight:()=>padding};
+  const cellText=(value,column)=>{const limit=Math.max(1,Math.floor(cellWidths[column]/6));return text(value).replace(new RegExp('[A-Za-z0-9]{'+(limit+1)+',}','g'),value=>value.match(new RegExp('.{1,'+limit+'}','g')).join('\n'));};
   content.push({text:'多筆土地共有清冊',fontSize:16,bold:true,alignment:'center',margin:[0,0,0,8],...(index?{pageBreak:'before'}:{})},
-   {text:'共 '+report.landCount+' 筆土地、'+report.people.length+' 列姓名彙整｜第 '+(index+1)+' 組土地對照',margin:[0,0,0,6]},
+   {text:'共 '+report.landCount+' 筆土地、'+report.people.length+' 列姓名彙整｜全部地號對照',margin:[0,0,0,6]},
    {text:root.RegistryMulti.notice,fontSize:9,margin:[0,0,0,10]},
-   {table:{headerRows:1,widths:block.widths.map(n=>available*n/100),body:[block.headers.map(value=>({text:value,alignment:'center',fillColor:'#e4efed',bold:true})),...block.rows.map(row=>row.map((value,column)=>({text:wrap(value),alignment:column>=3?'right':'left'})))],dontBreakRows:false},layout});
+   {table:{headerRows:1,widths:cellWidths,body:[block.headers.map((value,column)=>({text:cellText(value,column),alignment:'center',fillColor:'#e4efed',bold:true})),...block.rows.map(row=>row.map((value,column)=>({text:cellText(value,column),alignment:column>=3?'right':'left'})))],dontBreakRows:false},layout:matrixLayout});
  }
  for(const land of project.lands){const detail=definition(land.snapshot).content;content.push({...detail[0],pageBreak:'before'},...detail.slice(1));}
  doc.content=content;doc.info={title:'多筆土地共有清冊',creator:'謄本轉清冊'};return doc;
