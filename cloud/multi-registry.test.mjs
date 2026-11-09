@@ -70,3 +70,12 @@ test('address stamp cleanup allows the correct name-and-address consolidation wi
  const report=M.matrix(p);assert.equal(report.people.length,1);assert.equal(report.people[0].address,clean);
  assert.ok(p.lands[0].snapshot.rows[0].address.includes('謄本用紙'));
 });
+
+test('identical masked IDs never merge same-name owners with different addresses',()=>{
+ for(const id of ['L100*****4','A123****89','A123XXXX89','＊＊＊＊＊＊＊＊＊＊']){
+  const p=project([land('1',[row({name:'李先生',id,address:'臺中市北屯區測試路8號'})]),land('2',[row({name:'李先生',id,address:'美國德州維多利亞市櫻桃石圓環505號'})])]);
+  const report=M.matrix(p);assert.equal(report.people.length,2,id);assert.equal(report.people[0].cells[1].share,'—');assert.equal(report.people[1].cells[0].share,'—');
+ }
+ const sameAddress=project([land('1',[row({id:'L100*****4',address:'測試路8號'})]),land('2',[row({id:'L100*****4',address:'測試路8號'})])]);assert.equal(M.matrix(sameAddress).people.length,1);
+ const fullId=project([land('1',[row({id:'A123456789',address:'甲路1號'})]),land('2',[row({id:'A123456789',address:'乙路2號'})])]);assert.equal(M.matrix(fullId).people.length,1);assert.match(M.matrix(fullId).people[0].address,/甲路1號\n乙路2號/);
+});

@@ -33,7 +33,7 @@ function matrix(project){
   if(named){
    const keys=[];
    if(address&&!/^(?:—|地址待確認|待確認|未知|未填)$/.test(address))keys.push([byAddress,JSON.stringify([name,address.normalize('NFKC')])]);
-   if(/^[A-Z][12][A-Z0-9*]{8}$/.test(id))keys.push([byId,JSON.stringify([name,id])]);
+   if(/^[A-Z][12]\d{8}$/.test(id))keys.push([byId,JSON.stringify([name,id])]);
    for(const [map,key] of keys){if(map.has(key))join(index,map.get(key));else map.set(key,index);}
   }
  }
@@ -75,6 +75,6 @@ function blocks(project){
  const widths=lands.length===1?[5,13,36,17,12,17]:lands.length===2?[4,11,31,12,9,12,9,12]:[3,9,25,...lands.flatMap(()=>[30/lands.length,24/lands.length]),9];
  return {...report,blocks:[{headers,rows,widths}]};
 }
-const notice='姓名相同，且地址或身分證字號至少一項相同才合併；不同地址一併保留，空白欄位不作比對；各土地原始登記詳後附清冊。公同共有坪數標示「共同」，不列入個人跨土地合計。';
+const notice='姓名相同，且地址相同或完整未遮碼身分證字號相同才合併；遮碼、空白字號不單獨作合併依據；不同地址一併保留；各土地原始登記詳後附清冊。公同共有坪數標示「共同」，不列入個人跨土地合計。';
 root.RegistryMulti={single,key,label,hasData,empty,create,sync,upsert,matrix,blocks,notice};
 })(globalThis);
