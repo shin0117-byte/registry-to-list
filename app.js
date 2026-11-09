@@ -701,10 +701,14 @@ function isolateOwnershipSection(text) {
   const end = rest.search(/土\s*地\s*他\s*項\s*權\s*利\s*部/);
   return end < 0 ? rest : rest.slice(0, end);
 }
+function hasOverseasAddressPrefix(value) {
+ return /^(?:美國|美国|加拿大|澳洲|澳大利亞|澳大利亚|紐西蘭|新西兰|新西蘭|英國|英国|德國|德国|法國|法国|日本|韓國|韩国|新加坡|馬來西亞|马来西亚|泰國|泰国|越南|菲律賓|菲律宾|印尼|印度|南非|瑞士|瑞典|荷蘭|荷兰|比利時|比利时|義大利|意大利|西班牙|葡萄牙|巴西|阿根廷|墨西哥|香港|澳門|澳门|中國大陸|中国大陆|中華人民共和國|中华人民共和国|國外|海外|USA|U\.S\.(?:A\.)?|UNITED\s*STATES|CANADA|AUSTRALIA|JAPAN)/i.test(String(value||'').trim());
+}
 function extractAddress(raw, locality = '', database = { localities: [], aliases: {} }, roadDatabase = { sites: {} }) {
   let text = RegistryModel.address(raw);
   if (!text) return '';
   text = text.replace(/(?:權狀字號|當期申報|登記原因|權利範圍|統一編號).*$/, '');
+  if(hasOverseasAddressPrefix(text))return text;
   for (const [from, to] of Object.entries(database.aliases || {})) text = text.replaceAll(from, to);
   const matches = (database.localities || []).filter(item => text.includes(item.name)).sort((a, b) => b.name.length - a.name.length);
   if (matches.length) {
@@ -712,13 +716,14 @@ function extractAddress(raw, locality = '', database = { localities: [], aliases
     const localityIndex = text.indexOf(preferred.name);
     return normalizeRoad(`${preferred.county}${preferred.name}${text.slice(localityIndex + preferred.name.length)}`, `${preferred.county}${preferred.name}`, roadDatabase);
   }
-  const standardStart = text.search(/(?:[\u4e00-\u9fff]{1,3}縣|[\u4e00-\u9fff]{1,3}市)/);
+  const standardStart = text.search(/(?:臺北市|台北市|新北市|桃園市|臺中市|台中市|臺南市|台南市|高雄市|基隆市|新竹市|嘉義市|宜蘭縣|新竹縣|苗栗縣|彰化縣|南投縣|雲林縣|嘉義縣|屏東縣|花蓮縣|臺東縣|台東縣|澎湖縣|金門縣|連江縣)/);
   if (standardStart >= 0) return normalizeRoad(text.slice(standardStart), '', roadDatabase);
   const town = locality.match(/[\u4e00-\u9fff]{1,5}(?:區|鄉|鎮|市)$/)?.[0];
   if (town) { const townIndex = text.indexOf(town); if (townIndex >= 0) return normalizeRoad(`${locality}${text.slice(townIndex + town.length)}`, locality, roadDatabase); }
   return text.length >= 6 ? text : '';
 }
 function selectBestAddress(structuredAddress, croppedOcrAddress) {
+  if(hasOverseasAddressPrefix(structuredAddress))return structuredAddress;
   if (structuredAddress && /(?:市|縣).{2,}(?:區|鄉|鎮|市)/.test(structuredAddress)) return structuredAddress;
   return croppedOcrAddress || structuredAddress;
 }
