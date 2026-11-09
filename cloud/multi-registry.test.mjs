@@ -12,12 +12,16 @@ test('project keeps separate land records, upserts only the same parcel, and sav
  const edited=land('0001-0000',[row({address:'修改路9號'})]);const synced=M.sync(p,edited);assert.equal(synced.lands[0].snapshot.rows[0].address,'修改路9號');assert.equal(synced.lands[1].snapshot.rows[0].address,'測試縣測試鄉測試路1號');
  assert.equal(M.upsert(synced,[land('0002-0000',[], '300')]).lands.length,2);
 });
-test('same names merge regardless of IDs or addresses; unnamed rows stay separate',()=>{
+test('same names merge when address or ID matches; same-name-only and unnamed rows stay separate',()=>{
  const p=project([land('0001-0000',[row(),row({id:'B223456789',name:'同名'})]),land('0002-0000',[row({address:'另一住址9號'}),row({id:'C123456789',name:'同名'})])]);
  const report=M.matrix(p);assert.equal(report.people.length,2);assert.equal(report.people[0].cells.length,2);assert.equal(report.people[0].total,'30.25');assert.match(report.people[0].address,/另一住址/);
  const masked=project([land('1',[row({id:'A123****89'})]),land('2',[row({id:'A123****89'})])]);assert.equal(M.matrix(masked).people.length,1);assert.equal(M.matrix(masked).unnamed,0);
  const noId=project([land('1',[row({id:''})]),land('2',[row({id:''})])]);assert.equal(M.matrix(noId).people.length,1);
- const differentIds=project([land('1',[row({id:'A123456789',address:'甲路1號'})]),land('2',[row({id:'B223456789',address:'乙路2號'})])]);assert.equal(M.matrix(differentIds).people.length,1);assert.match(M.matrix(differentIds).people[0].address,/甲路1號\n乙路2號/);
+ const differentIds=project([land('1',[row({id:'A123456789',address:'甲路1號'})]),land('2',[row({id:'B223456789',address:'乙路2號'})])]);assert.equal(M.matrix(differentIds).people.length,2);
+ const sameId=project([land('1',[row({address:'甲路1號'})]),land('2',[row({address:'乙路2號'})])]);assert.equal(M.matrix(sameId).people.length,1);assert.match(M.matrix(sameId).people[0].address,/甲路1號\n乙路2號/);
+ const absent=project([land('1',[row({id:'',address:''})]),land('2',[row({id:'',address:''})])]);assert.equal(M.matrix(absent).people.length,2);
+ const differentName=project([land('1',[row({name:'甲先生'})]),land('2',[row({name:'乙先生'})])]);assert.equal(M.matrix(differentName).people.length,2);
+ const bridge=project([land('1',[row({address:'甲路1號',id:'A123456789'})]),land('2',[row({address:'乙路2號',id:'B223456789'})]),land('3',[row({address:'甲路1號',id:'B223456789'})])]);assert.equal(M.matrix(bridge).people.length,1);
  const blank=project([land('1',[row({name:'',id:''})]),land('2',[row({name:'',id:''})])]);assert.equal(M.matrix(blank).people.length,2);
  const noisy=project([land('1',[row({name:'李木榮'})]),land('2',[row({name:'李木榮住******608.0元/平方公尺前次移轉現值或原規定地價址:測試地址'})])]);assert.equal(M.matrix(noisy).people.length,1);assert.equal(M.matrix(noisy).people[0].name,'李木榮');
 });

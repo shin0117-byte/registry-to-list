@@ -23,12 +23,22 @@ function upsert(project,snapshots){
  return p;
 }
 function matrix(project){
- const model=root.RegistryModel,people=[],lookup=new Map();let unnamed=0;
- for(const [landIndex,land] of project.lands.entries())for(const [rowIndex,row] of land.snapshot.rows.entries()){
+ const model=root.RegistryModel,people=[],lookup=new Map(),entries=[],parents=[],byAddress=new Map(),byId=new Map();let unnamed=0;
+ const find=index=>{if(parents[index]!==index)parents[index]=find(parents[index]);return parents[index];};
+ const join=(a,b)=>{const x=find(a),y=find(b);if(x!==y)parents[y]=x;};
+ for(const [landIndex,land] of project.lands.entries())for(const row of land.snapshot.rows){
   const name=model.ownerName(row.name).split(/住(?=[＊*\d])|住址[：:]|統一編號[：:]|出生日期[：:]|當期申報地價[：:]|前次移轉現值/)[0].normalize('NFKC'),address=model.address(row.address);
-  const named=Boolean(name&&name!=='姓名待確認');
-  const identity=named?'name:'+name:'separate:'+landIndex+':'+rowIndex;
-  let person=lookup.get(identity);
+  const named=Boolean(name&&!/^[（(]?姓名待確認[）)]?$/.test(name)),id=String(row.id||'').normalize('NFKC').replace(/\s/g,'').toUpperCase();
+  const index=entries.length;parents.push(index);entries.push({name,address,named,landIndex,row});
+  if(named){
+   const keys=[];
+   if(address&&!/^(?:—|地址待確認|待確認|未知|未填)$/.test(address))keys.push([byAddress,JSON.stringify([name,address.normalize('NFKC')])]);
+   if(/^[A-Z][12][A-Z0-9*]{8}$/.test(id))keys.push([byId,JSON.stringify([name,id])]);
+   for(const [map,key] of keys){if(map.has(key))join(index,map.get(key));else map.set(key,index);}
+  }
+ }
+ for(const [index,entry] of entries.entries()){
+  const {name,address,named,landIndex,row}=entry,identity=find(index);let person=lookup.get(identity);
   if(!person){person={name:name||'姓名待確認',address:address||'—',addresses:[],unnamed:!named,cells:project.lands.map(()=>[])};lookup.set(identity,person);people.push(person);if(!named)unnamed++;}
   if(address&&!person.addresses.includes(address))person.addresses.push(address);
   person.address=person.addresses.join('\n')||'—';person.cells[landIndex].push(row);
@@ -68,6 +78,6 @@ function blocks(project){
  }
  return {...report,blocks:output};
 }
-const notice='總表依相同姓名合併，不同地址一併保留；各土地原始登記詳後附清冊。公同共有坪數標示「共同」，不列入個人跨土地合計。';
+const notice='姓名相同，且地址或身分證字號至少一項相同才合併；不同地址一併保留，空白欄位不作比對；各土地原始登記詳後附清冊。公同共有坪數標示「共同」，不列入個人跨土地合計。';
 root.RegistryMulti={single,key,label,hasData,empty,create,sync,upsert,matrix,blocks,notice};
 })(globalThis);
