@@ -45,14 +45,14 @@ test('draft and scan history retain all land snapshots and views without recursi
 });
 test('PDF exports comparison then all land details, including rights, without exporting identity numbers',()=>{
  const p=project([land('0001-0000'),land('0002-0000')]),doc=c.RegistryPdf.projectDefinition(p);assert.equal(doc.pageSize,'A3');assert.equal(doc.pageOrientation,'portrait');
- assert.equal(doc.content.filter(item=>item.pageBreak==='before').length,2);assert.ok(JSON.stringify(doc).includes('他項權利明細'));assert.ok(!JSON.stringify(doc).includes('A123456789'));
+ assert.equal(doc.content.filter(item=>item.pageBreak==='before').length,0);assert.ok(JSON.stringify(doc).includes('他項權利明細'));assert.ok(!JSON.stringify(doc).includes('A123456789'));
 });
 test('XLSX contains summary and separate A3 land sheets, keeping remarks and rights in native cells',async()=>{
  const p=project([land('0001-0000'),land('0002-0000')]),book=globalThis.RegistryExcel.buildProject(p,Excel),loaded=new Excel.Workbook();await loaded.xlsx.load(await book.xlsx.writeBuffer());
  assert.equal(loaded.worksheets.length,3);assert.equal(loaded.worksheets[0].name,'共有人總表');assert.equal(loaded.worksheets[1].getCell('H7').value,'原備註');
  for(const sheet of loaded.worksheets){assert.equal(sheet.pageSetup.orientation,'portrait');assert.equal(sheet.pageSetup.paperSize,8);}
  const larger=globalThis.RegistryExcel.buildProject(project(Array.from({length:5},(_,i)=>land(String(i)))),Excel);assert.equal(larger.worksheets.length,6);assert.match(larger.worksheets[0].pageSetup.printArea,/N/);
- const three=project([land('0001-0000'),land('0002-0000'),land('0003-0000')]);const doc=c.RegistryPdf.projectDefinition(three),table=doc.content.find(item=>item.table).table;assert.equal(table.widths.length,10);assert.ok(table.body[0].some(cell=>cell.text.includes('0003-0000')));assert.equal(doc.content.filter(item=>item.pageBreak==='before').length,3);
+ const three=project([land('0001-0000'),land('0002-0000'),land('0003-0000')]);const doc=c.RegistryPdf.projectDefinition(three),table=doc.content.find(item=>item.table).table;assert.equal(table.widths.length,10);assert.ok(table.body[0].some(cell=>cell.text.includes('0003-0000')));assert.equal(doc.content.filter(item=>item.pageBreak==='before').length,0);
 });
 test('multi-file import prepares each parcel independently, persists once, and rejects mixed parcels within one PDF',async()=>{
  const transcript=(parcel,area)=>`測試縣測試鄉測試段${parcel}地號\n土地標示部\n面積：${area}平方公尺\n土地所有權部\n（0001）登記次序：0001\n所有權人：測試＊＊\n統一編號：A123456789\n住址：測試縣測試鄉測試路1號\n權利範圍：1/1\n登記原因：買賣\n原因發生日期：民國115年01月01日`;
@@ -78,4 +78,14 @@ test('identical masked IDs never merge same-name owners with different addresses
  }
  const sameAddress=project([land('1',[row({id:'L100*****4',address:'測試路8號'})]),land('2',[row({id:'L100*****4',address:'測試路8號'})])]);assert.equal(M.matrix(sameAddress).people.length,1);
  const fullId=project([land('1',[row({id:'A123456789',address:'甲路1號'})]),land('2',[row({id:'A123456789',address:'乙路2號'})])]);assert.equal(M.matrix(fullId).people.length,1);assert.match(M.matrix(fullId).people[0].address,/甲路1號\n乙路2號/);
+});
+
+test('multi registry names use the first parcel, parcel count and Taiwan Gregorian export date',()=>{
+ const p=project([land('0595-0000'),land('0595-0002')]);p.lands[0].snapshot.fields={...p.lands[0].snapshot.fields,district:'台東縣台東縣卑南鄉',section:'東興段'};
+ const expected='台東縣卑南鄉東興段0595-0000地號等2筆清冊20261111';
+ assert.equal(M.projectTitle(p,new Date('2026-11-11T00:00:00+08:00')),expected);
+ assert.equal(M.projectTitle(p,new Date('2026-11-10T16:00:00Z')),expected);
+ const doc=c.RegistryPdf.projectDefinition(p);assert.match(doc.content[0].text,/東興段0595-0000地號等2筆清冊\d{8}$/);assert.equal(doc.info.title,doc.content[0].text);
+ assert.equal(doc.pageBreakBefore({headlineLevel:1},[],[{}]),true);assert.equal(doc.pageBreakBefore({headlineLevel:1},[{}],[{}]),false);
+ const book=globalThis.RegistryExcel.buildProject(p,Excel);assert.equal(book.worksheets[0].getCell('A1').value,book.title);assert.match(book.title,/東興段0595-0000地號等2筆清冊\d{8}$/);
 });

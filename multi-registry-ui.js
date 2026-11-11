@@ -28,7 +28,7 @@ async function exportProject(format,button){
  if(p.lands.some(land=>root.RegistryModel.legacyDraft(land.snapshot))){api.message('其中一筆舊清冊缺少登記關聯，請先切換到該土地並重新讀取原謄本');return;}
  const clean={...p,lands:p.lands.filter(land=>root.RegistryMulti.hasData(land.snapshot))};
  const old=button?.textContent;if(button){button.disabled=true;button.textContent='正在產生檔案…';}
- try{const filename='多筆土地共有清冊'+api.date()+'.'+(format==='pdf'?'pdf':'xlsx');await (format==='pdf'?root.RegistryPdf:root.RegistryExcel).downloadProject(clean,filename);api.message('已匯出多筆總表及各土地明細');}
+ try{const filename=root.RegistryMulti.projectTitle(clean).replace(/[\\/:*?"<>|]/g,'_')+'.'+(format==='pdf'?'pdf':'xlsx');await (format==='pdf'?root.RegistryPdf:root.RegistryExcel).downloadProject(clean,filename);api.message('已匯出多筆總表及各土地明細');}
  catch(error){api.message('匯出失敗：'+error.message);}
  finally{if(button){button.disabled=false;button.textContent=old;}render();}
 }

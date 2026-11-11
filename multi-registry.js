@@ -4,6 +4,12 @@ const clone=value=>JSON.parse(JSON.stringify(value));
 const single=snapshot=>{const {project,...data}=snapshot;return clone(data);};
 const key=fields=>[fields?.district,fields?.section,fields?.parcel].map(v=>String(v||'').replace(/\s/g,'')).join('|');
 const label=fields=>[fields?.district,fields?.section,fields?.parcel].filter(Boolean).join('')||'尚未填寫地號';
+function projectTitle(project,now=new Date()){
+ const first=project.lands[0];if(!first)throw new Error('請先加入土地清冊');
+ const parts=new Intl.DateTimeFormat('en-US',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now),part=type=>parts.find(item=>item.type===type).value;
+ const fields=first.snapshot.fields,district=String(fields.district||'').replace(/^([\u3400-\u9fff]{2,3}[縣市])(?:\1)+/,'$1');
+ return [district,fields.section,fields.parcel].filter(Boolean).join('')+'地號等'+project.lands.length+'筆清冊'+part('year')+part('month')+part('day');
+}
 const hasData=snapshot=>Boolean(snapshot?.fields?.parcel||snapshot?.rows?.length);
 const empty=()=>({version:1,view:'single',activeKey:'',lands:[]});
 function create(snapshot){return hasData(snapshot)?upsert(empty(),[snapshot]):empty();}
@@ -76,5 +82,5 @@ function blocks(project){
  return {...report,blocks:[{headers,rows,widths}]};
 }
 const notice='姓名相同，且地址相同或完整未遮碼身分證字號相同才合併；遮碼、空白字號不單獨作合併依據；不同地址一併保留；各土地原始登記詳後附清冊。公同共有坪數標示「共同」，不列入個人跨土地合計。';
-root.RegistryMulti={single,key,label,hasData,empty,create,sync,upsert,matrix,blocks,notice};
+root.RegistryMulti={single,key,label,projectTitle,hasData,empty,create,sync,upsert,matrix,blocks,notice};
 })(globalThis);
